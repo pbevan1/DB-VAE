@@ -16,21 +16,21 @@ class GenericImageDataset(Dataset):
     def __init__(
         self,
         csv,
-        filter_exclude_skin_color = None,
+        filter_skin_color = None,
         path_to_images: str = ARGS.image_dir,
         get_sub_images: bool = False,
         sub_images_nr_windows: int = 10,
         sub_images_batch_size: int = 10,
         sub_images_min_size: int = 30,
-        sub_images_max_size: int = 64,
+        sub_images_max_size: int = 256,
         sub_images_stride: float = 0.2,
         transform: Callable = default_transform, ###
         **kwargs
     ):
-        self.filter_exclude_skin_color = filter_exclude_skin_color
+        self.filter_skin_color = filter_skin_color
         self.csv = csv.reset_index(drop=True)
-        if filter_exclude_skin_color!=None:
-            self.csv = self.csv.loc[self.csv.fitzpatrick != self.filter_exclude_skin_color, :]
+        if filter_skin_color!=None:
+            self.csv = self.csv.loc[self.csv.fitzpatrick == self.filter_skin_color, :]
 
         # self.store: pd.DataFrame = self.init_store(self.csv.filepath)
         self.path_to_images = path_to_images
@@ -101,7 +101,7 @@ class GenericImageDataset(Dataset):
 
         # if len(self.filter_excl_skin_color):
         #     try:
-        result = result.loc[result.fitzpatrick!=self.filter_exclude_skin_color, :]
+        result = result.loc[result.fitzpatrick!=self.filter_skin_color, :]
                 # result = result.query('bi_fitz not in @self.filter_excl_skin_color')
             # except:
             #     logger.error("bi_fitz can't be found in the metadata datadframe",

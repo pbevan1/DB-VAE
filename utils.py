@@ -35,7 +35,7 @@ def get_best_and_worst_predictions(labels, pred, device):
     n_rows = 4
     n_samples = n_rows**2
 
-    logger.info(f"Face percentage: {float(labels.sum().item())/len(labels)}")
+    logger.info(f"Melanoma percentage: {float(labels.sum().item())/len(labels)}")
     indices = torch.tensor([i for i in range(len(labels))]).long().to(device)
 
     faceslice = labels == 1
@@ -187,7 +187,7 @@ def find_face_in_subimages(model, sub_images: torch.Tensor, device: str):
 
         # If one image
         if len(images.shape) == 3:
-            images = images.view(1, 3, 64, 64)
+            images = images.view(1, 3, 256, 256)
         images = images.to(device)
         pred = model.forward_eval(images)
 
@@ -199,9 +199,9 @@ def find_face_in_subimages(model, sub_images: torch.Tensor, device: str):
 
 
 def default_transforms():
-    """Transforms a transform object to a 64 by 64 tensor."""
+    """Transforms a transform object to a 256 by 256 tensor."""
     return transforms.Compose([
-        transforms.Resize((64, 64)),
+        transforms.Resize((256, 256)),
         transforms.ToTensor()
     ])
 

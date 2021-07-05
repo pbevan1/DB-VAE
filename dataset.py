@@ -130,6 +130,9 @@ def get_df():
     # df_train.iloc[1562:2343, -1] = 2
     # df_train.iloc[2343:3134, -1] = 3
     # df_train.iloc[3134:3915, -1] = 4
+    print(len(df_train))
+    print(len(df_val))
+    print(len(df_test))
 
     mel_idx = 1
 
@@ -281,7 +284,7 @@ def make_eval_loader(
     # path_to_eval_nonface_images: str,
     # filter_exclude_gender: List[str] = [],
     # filter_exclude_country: List[str] = [],
-    filter_exclude_skin_color = 5,
+    filter_skin_color = 5,
     max_images: int = -1,
     proportion_faces: float = 0.5,
     dataset_type: str = EvalDatasetType.PBB_ONLY.value,
@@ -289,7 +292,7 @@ def make_eval_loader(
 ):
     """Creates an evaluaion data loader."""
 
-    dataset = GenericImageDataset(csv=csv, filter_exclude_skin_color=filter_exclude_skin_color)
+    dataset = GenericImageDataset(csv=csv, filter_skin_color=filter_skin_color)
     # if dataset_type == EvalDatasetType.PBB_ONLY.value:
     #     logger.info('Evaluating on PPB')
     #
@@ -298,7 +301,7 @@ def make_eval_loader(
     #         path_to_metadata=csv,
     #         filter_excl_country=filter_exclude_country,
     # #         filter_excl_gender=filter_exclude_gender,
-    # filter_excl_skin_color=filter_exclude_skin_color,
+    # filter_excl_skin_color=filter_skin_color,
     #         get_sub_images=True,
     #         **kwargs
     #     )

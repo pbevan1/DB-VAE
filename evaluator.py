@@ -64,21 +64,21 @@ class Evaluator:
         )
         raise Exception
 
-    def eval(self, filter_exclude_skin_color = 5, max_images: int = -1):
+    def eval(self, filter_skin_color = 5, max_images: int = -1):
         """Evaluates a model based and returns the amount of correctly classified and total classified images."""
         self.model.eval()
         #
         # if dataset_type == "":
         eval_loader: DataLoader = make_eval_loader(
             csv=self.csv,
-            filter_exclude_skin_color=filter_exclude_skin_color,
+            filter_skin_color=filter_skin_color,
             **asdict(self.config)
         )
         # else:
         #     params = {**asdict(self.config), 'max_images': max_images}
         #
         #     eval_loader: DataLoader = make_eval_loader(
-        #         filter_exclude_skin_color=filter_exclude_skin_color,
+        #         filter_skin_color=filter_skin_color,
         #         filter_exclude_gender=filter_exclude_gender,
         #         dataset_type=dataset_type,
         #         **params
@@ -110,13 +110,13 @@ class Evaluator:
 
             # Calculate on the current setup
             correct_count, count, LABELS, SIGOUTS = self.eval(
-                filter_exclude_skin_color=skin_list[i]
+                filter_skin_color=skin_list[i]
             )
 
             # Calculate the metrics
             a_u_c = utils.calculate_AUC(LABELS, SIGOUTS)
 
-            sensitivity, specificity = utils.calculate_sens_spec(LABELS,SIGOUTS)
+            # sensitivity, specificity = utils.calculate_sens_spec(LABELS,SIGOUTS)
 
 
             accuracy = correct_count / count * 100
@@ -128,14 +128,14 @@ class Evaluator:
             logger.info(f"AUC for {name_list[i]} is {a_u_c:.3f}")
             accuracies.append(accuracy)
             aucs.append(a_u_c)
-            sensitivities.append(sensitivity)
-            specificities.append(specificity)
+            # sensitivities.append(sensitivity)
+            # specificities.append(specificity)
 
         # Calculate the average recall
         avg_acc = correct/total_count*100
         avg_auc = sum(aucs)/len(name_list)
-        avg_sens = sum(sensitivities) / len(name_list)
-        avg_spec = sum(specificities) / len(name_list)
+        # avg_sens = sum(sensitivities) / len(name_list)
+        # avg_spec = sum(specificities) / len(name_list)
 
         acc_variance = (torch.tensor(accuracies)).var().item()
         auc_variance = (torch.tensor(aucs)).var().item()
@@ -166,20 +166,20 @@ class Evaluator:
         logger.info(f"AUC => type 5: {aucs[4]:.3f}")
         logger.info(f"AUC => type 6: {aucs[5]:.3f}")
         logger.info(f"Accuracy Variance => {auc_variance:.3f}")
-        logger.info(f"Sensitivity => all: {avg_sens:.3f}")
-        logger.info(f"Sensitivity => type 1: {sensitivities[0]:.3f}")
-        logger.info(f"Sensitivity => type 2: {sensitivities[1]:.3f}")
-        logger.info(f"Sensitivity => type 3: {sensitivities[2]:.3f}")
-        logger.info(f"Sensitivity => type 4: {sensitivities[3]:.3f}")
-        logger.info(f"Sensitivity => type 5: {sensitivities[4]:.3f}")
-        logger.info(f"Sensitivity => type 6: {sensitivities[5]:.3f}")
-        logger.info(f"Specificity => all: {avg_spec:.3f}")
-        logger.info(f"Specificity => type 1: {specificities[0]:.3f}")
-        logger.info(f"Specificity => type 2: {specificities[1]:.3f}")
-        logger.info(f"Specificity => type 3: {specificities[2]:.3f}")
-        logger.info(f"Specificity => type 4: {specificities[3]:.3f}")
-        logger.info(f"Specificity => type 5: {specificities[4]:.3f}")
-        logger.info(f"Specificity => type 6: {specificities[5]:.3f}")
+        # logger.info(f"Sensitivity => all: {avg_sens:.3f}")
+        # logger.info(f"Sensitivity => type 1: {sensitivities[0]:.3f}")
+        # logger.info(f"Sensitivity => type 2: {sensitivities[1]:.3f}")
+        # logger.info(f"Sensitivity => type 3: {sensitivities[2]:.3f}")
+        # logger.info(f"Sensitivity => type 4: {sensitivities[3]:.3f}")
+        # logger.info(f"Sensitivity => type 5: {sensitivities[4]:.3f}")
+        # logger.info(f"Sensitivity => type 6: {sensitivities[5]:.3f}")
+        # logger.info(f"Specificity => all: {avg_spec:.3f}")
+        # logger.info(f"Specificity => type 1: {specificities[0]:.3f}")
+        # logger.info(f"Specificity => type 2: {specificities[1]:.3f}")
+        # logger.info(f"Specificity => type 3: {specificities[2]:.3f}")
+        # logger.info(f"Specificity => type 4: {specificities[3]:.3f}")
+        # logger.info(f"Specificity => type 5: {specificities[4]:.3f}")
+        # logger.info(f"Specificity => type 6: {specificities[5]:.3f}")
         # logger.info(f"Recall => white male: {recalls[2]:.3f}")
         # logger.info(f"Recall => white female: {recalls[3]:.3f}")
 
@@ -194,7 +194,10 @@ class Evaluator:
                 write_file.write(f"name,dark male,dark female,light male,light female,var,precision,recall,accuracy\n")
 
             write_file.write(f"{self.path_to_model}_{self.model_name}")
-            write_file.write(f",{accuracies[0]:.3f},{accuracies[1]:.3f},{variance:.3f},{avg_acc:.3f},{accuracy:.3f}\n")
+            write_file.write(f",{accuracies[0]:.3f},{accuracies[1]:.3f},{accuracies[2]:.3f},{accuracies[3]:.3f},"
+                             f"{accuracies[4]:.3f},{accuracies[5]:.3f},avg_acc:{avg_acc:.3f},acc_variance:{acc_variance:.3f},"
+                             f"{aucs[0]:.3f},{aucs[1]:.3f},{aucs[2]:.3f},{aucs[3]:.3f},{aucs[4]:.3f},{aucs[5]:.3f},"
+                             f"avg_auc:{avg_auc:.3f},auc_variance:{auc_variance:.3f}\n")
 
         logger.success("Finished evaluation!")
 

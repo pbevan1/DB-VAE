@@ -47,7 +47,7 @@ class DatasetOutput(NamedTuple):
 
 # Default transform
 default_transform = A.Compose([
-    A.Resize(64, 64),
+    A.Resize(256, 256),
     A.Normalize()
 ])
 

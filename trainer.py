@@ -191,19 +191,19 @@ class Trainer:
         fig=plt.figure(figsize=(16, 8))
 
         fig.add_subplot(1, 2, 1)
-        grid = make_grid(images.reshape(n_samples,3,64,64), n_rows)
+        grid = make_grid(images.reshape(n_samples,3,256,256), n_rows)
         plt.imshow(grid.permute(1,2,0).cpu())
 
         utils.remove_frame(plt)
 
         fig.add_subplot(1, 2, 2)
-        grid = make_grid(recon_images.reshape(n_samples,3,64,64), n_rows)
+        grid = make_grid(recon_images.reshape(n_samples,3,256,256), n_rows)
         plt.imshow(grid.permute(1,2,0).cpu())
 
         utils.remove_frame(plt)
 
         if save:
-            fig.savefig('results/{}/reconstructions/epoch={}'.format(self.config.run_folder, epoch), bbox_inches='tight')
+            fig.savefig(f'results/{self.config.run_folder}/reconstructions/epoch={epoch}', bbox_inches='tight')
 
             plt.close()
         else:
@@ -247,7 +247,7 @@ class Trainer:
 
         for i in range(2):
             ax = fig.add_subplot(1, 2, i+1)
-            grid = make_grid(img_list[i].reshape(n_samples,3,64,64), n_rows)
+            grid = make_grid(img_list[i].reshape(n_samples,3,256,256), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
             ax.set_title(titles[i], fontdict={"fontsize":30})
 
@@ -428,7 +428,7 @@ class Trainer:
         sample_images = self.model.sample(n_samples = n_samples)
 
         plt.figure(figsize=(n_rows*2,n_rows*2))
-        grid = make_grid(sample_images.reshape(n_samples,3,64,64), n_rows)
+        grid = make_grid(sample_images.reshape(n_samples,3,256,256), n_rows)
         plt.imshow(grid.permute(1,2,0).cpu())
 
         utils.remove_frame(plt)
@@ -457,19 +457,20 @@ class Trainer:
             images = utils.sample_idxs_from_loader(indices, data_loader, labels[0])
 
             ax = fig.add_subplot(2, 2, i+1)
-            grid = make_grid(images.reshape(n_samples,3,64,64), n_rows)
+            grid = make_grid(images.reshape(n_samples,3,256,256), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
             ax.set_title(sub_titles[i], fontdict={"fontsize":30})
 
             utils.remove_frame(plt)
 
         if save:
-            fig.savefig('results/{}/best_and_worst/epoch:{}'.format(self.config.run_folder, epoch), bbox_inches='tight')
+            fig.savefig(f'results/{self.config.run_folder}/best_and_worst/epoch:{epoch}', bbox_inches='tight')
 
             plt.close()
 
-        else:
-            return fig
+        # else:
+        #
+        return fig
 
 
     def best_and_worst(self, n_rows=4):
@@ -508,7 +509,7 @@ class Trainer:
                 count = i
 
         best_faces, worst_faces, best_other, worst_other = utils.get_best_and_worst_predictions(all_labels, all_preds, self.device)
-        fig = self.visualize_best_and_worst(self.valid_loaders, all_labels, all_idxs, 0, best_faces, worst_faces, best_other, worst_other, save=False)
+        fig = self.visualize_best_and_worst(self.valid_loaders, all_labels, all_idxs, 0, best_faces, worst_faces, best_other, worst_other, save=True)
 
         fig.show()
 

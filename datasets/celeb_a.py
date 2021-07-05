@@ -7,7 +7,7 @@ from logger import logger
 
 # Default transform
 default_transform = transforms.Compose([
-    transforms.Resize((64, 64)),
+    transforms.Resize((256, 256)),
     transforms.ToTensor()
 ])
 

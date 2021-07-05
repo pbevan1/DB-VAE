@@ -59,7 +59,7 @@ def classify_image(
 
      # Make sub-images
      img = utils.read_image(path_to_image)
-     sub_images: torch.Tensor = slide_windows_over_img(img, 30, 64, 10, 0.2)
+     sub_images: torch.Tensor = slide_windows_over_img(img, 100, 256, 10, 0.2)
      sub_images = torch.split(sub_images, batch_size)
 
      if utils.find_face_in_subimages(model, sub_images, device):
