@@ -13,12 +13,14 @@ from logger import logger
 import cv2
 import pandas as pd
 import albumentations as A
+from sklearn.model_selection import train_test_split
 
 from datasets.data_utils import CountryEnum, DataLoaderTuple, GenderEnum, SkinColorEnum
 from datasets.celeb_a import CelebDataset
 from datasets.imagenet import ImagenetDataset
 from datasets.ppb import PPBDataset
 from setup import *
+from datasets.generic import *
 
 
 # class FitzDataset(GenericImageDataset):
@@ -117,24 +119,26 @@ def get_df():
     fp2idx = {d: idx for idx, d in enumerate(sorted(df_train['fitzpatrick'].unique()))}
     df_train['fitzpatrick'] = df_train['fitzpatrick'].map(fp2idx)
     #splitting to test and train
-    df_fitz_34 = df_train.loc[(df_train['fitzpatrick'] == 2) | (df_train['fitzpatrick'] == 3), :]
-    df_fitz_56 = df_train.loc[(df_train['fitzpatrick'] == 4) | (df_train['fitzpatrick'] == 5), :]
-    df_train = df_train.loc[(df_train['fitzpatrick'] == 0) | (df_train['fitzpatrick'] == 1), :]
-    df_train = df_train.sample(frac=1).reset_index(drop=True)
-    df_train['fold'] = 0
-    df_train.iloc[781:1562,-1] = 1
-    df_train.iloc[1562:2343, -1] = 2
-    df_train.iloc[2343:3134, -1] = 3
-    df_train.iloc[3134:3915, -1] = 4
+    # df_fitz_34 = df_train.loc[(df_train['fitzpatrick'] == 2) | (df_train['fitzpatrick'] == 3), :]
+    # df_fitz_56 = df_train.loc[(df_train['fitzpatrick'] == 4) | (df_train['fitzpatrick'] == 5), :]
+    # df_train = df_train.loc[(df_train['fitzpatrick'] == 0) | (df_train['fitzpatrick'] == 1), :]
+    # df_train = df_train.sample(frac=1).reset_index(drop=True)
+    df_train, df_test = train_test_split(df_train, test_size=0.2, random_state=42, shuffle=True)
+    df_train, df_val = train_test_split(df_train, test_size=0.1, random_state=42, shuffle=True)
+    # df_train['fold'] = 0
+    # df_train.iloc[781:1562,-1] = 1
+    # df_train.iloc[1562:2343, -1] = 2
+    # df_train.iloc[2343:3134, -1] = 3
+    # df_train.iloc[3134:3915, -1] = 4
 
     mel_idx = 1
 
-    return df_train, df_fitz_34, df_fitz_56, mel_idx
+    return df_train, df_val, df_test, mel_idx
 
 def get_transforms():
     #augmentations for all training data
     transforms = A.Compose([
-        A.Resize(64, 64),
+        A.Resize(256, 256),
         A.Normalize()#mean, std)
     ])
     return transforms
@@ -273,48 +277,50 @@ class EvalDatasetType(Enum):
 def make_eval_loader(
     num_workers: int,
     path_to_eval_face_images: str,
-    path_to_eval_metadata: str,
-    path_to_eval_nonface_images: str,
-    filter_exclude_gender: List[str] = [],
-    filter_exclude_country: List[str] = [],
-    filter_exclude_skin_color: List[str] = [],
+    csv,
+    # path_to_eval_nonface_images: str,
+    # filter_exclude_gender: List[str] = [],
+    # filter_exclude_country: List[str] = [],
+    filter_exclude_skin_color = 5,
     max_images: int = -1,
     proportion_faces: float = 0.5,
     dataset_type: str = EvalDatasetType.PBB_ONLY.value,
     **kwargs
 ):
     """Creates an evaluaion data loader."""
-    if dataset_type == EvalDatasetType.PBB_ONLY.value:
-        logger.info('Evaluating on PPB')
 
-        dataset = PPBDataset(
-            path_to_images=path_to_eval_face_images,
-            path_to_metadata=path_to_eval_metadata,
-            filter_excl_country=filter_exclude_country,
-            filter_excl_gender=filter_exclude_gender,
-            filter_excl_skin_color=filter_exclude_skin_color,
-            get_sub_images=True,
-            **kwargs
-        )
-    elif dataset_type == EvalDatasetType.IMAGENET_ONLY.value:
-        logger.info('Evaluating on Imagenet')
-
-        dataset = ImagenetDataset(
-            path_to_images=path_to_eval_nonface_images,
-            get_sub_images=True,
-            **kwargs
-        )
-    else:
-        logger.info('Evaluating on Imagenet H5')
-
-        _, h5_nonfaces = make_h5_datasets(**kwargs)
-
-        dataset = H5Imagenet(
-            path_to_images='',
-            h5_dataset=h5_nonfaces.store,
-            get_sub_images=True,
-            **kwargs
-        )
+    dataset = GenericImageDataset(csv=csv, filter_exclude_skin_color=filter_exclude_skin_color)
+    # if dataset_type == EvalDatasetType.PBB_ONLY.value:
+    #     logger.info('Evaluating on PPB')
+    #
+    #     dataset = PPBDataset(
+    #         path_to_images=path_to_eval_face_images,
+    #         path_to_metadata=csv,
+    #         filter_excl_country=filter_exclude_country,
+    # #         filter_excl_gender=filter_exclude_gender,
+    # filter_excl_skin_color=filter_exclude_skin_color,
+    #         get_sub_images=True,
+    #         **kwargs
+    #     )
+    # elif dataset_type == EvalDatasetType.IMAGENET_ONLY.value:
+    #     logger.info('Evaluating on Imagenet')
+    #
+    #     dataset = ImagenetDataset(
+    #         path_to_images=path_to_eval_nonface_images,
+    #         get_sub_images=True,
+    #         **kwargs
+    #     )
+    # else:
+    #     logger.info('Evaluating on Imagenet H5')
+    #
+    #     _, h5_nonfaces = make_h5_datasets(**kwargs)
+    #
+    #     dataset = H5Imagenet(
+    #         path_to_images='',
+    #         h5_dataset=h5_nonfaces.store,
+    #         get_sub_images=True,
+    #         **kwargs
+    #     )
 
     # If max images, sample only a smaller amount
     nr_images: Optional[int] = max_images if max_images >= 0 else None

@@ -16,6 +16,7 @@ class GenericImageDataset(Dataset):
     def __init__(
         self,
         csv,
+        filter_exclude_skin_color = None,
         path_to_images: str = ARGS.image_dir,
         get_sub_images: bool = False,
         sub_images_nr_windows: int = 10,
@@ -26,7 +27,11 @@ class GenericImageDataset(Dataset):
         transform: Callable = default_transform, ###
         **kwargs
     ):
+        self.filter_exclude_skin_color = filter_exclude_skin_color
         self.csv = csv.reset_index(drop=True)
+        if filter_exclude_skin_color!=None:
+            self.csv = self.csv.loc[self.csv.fitzpatrick != self.filter_exclude_skin_color, :]
+
         # self.store: pd.DataFrame = self.init_store(self.csv.filepath)
         self.path_to_images = path_to_images
         self.transform = transform
@@ -83,6 +88,27 @@ class GenericImageDataset(Dataset):
     def read_image(self, idx: int):
         """Interface, returns an PIL Image using the index."""
         pass
+
+    def _apply_filters_to_metadata(self):
+        """Allows filters to filter out countries, skin-colors and genders."""
+        result = self.csv
+
+        # if len(self.filter_excl_country):
+        #     result = result.query('country not in @self.filter_excl_country')
+        #
+        # if len(self.filter_excl_gender):
+        #     result = result.query('gender not in @self.filter_excl_gender')
+
+        # if len(self.filter_excl_skin_color):
+        #     try:
+        result = result.loc[result.fitzpatrick!=self.filter_exclude_skin_color, :]
+                # result = result.query('bi_fitz not in @self.filter_excl_skin_color')
+            # except:
+            #     logger.error("bi_fitz can't be found in the metadata datadframe",
+            #                  next_step="The skin color wont be applied",
+            #                  tip="Rename the bi.fitz column to be bi_fitz in the metadata csv")
+
+        return result
 
     def __len__(self):
         return self.csv.shape[0]

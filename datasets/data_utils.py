@@ -76,7 +76,7 @@ def apply_window_resize(img: torch.Tensor, win_size: int):
 
     img_transforms = transforms.Compose([
         pil_transform,
-        transforms.Resize((64, 64)),
+        transforms.Resize((256, 256)),
         transforms.ToTensor()
     ])
 

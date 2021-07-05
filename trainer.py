@@ -6,6 +6,7 @@ import os
 from tqdm import tqdm
 from logger import logger
 from torch.utils.data.dataset import Dataset
+import numpy as np
 
 from setup import init_trainining_results
 from vae_model import Db_vae
@@ -31,7 +32,7 @@ class Trainer:
         debias_type: str,
         device: str,
         lr: float = 0.001,
-        eval_freq: int = 10,
+        eval_freq: int = 36,
         optimizer = torch.optim.Adam,
         load_model: bool = False,
         run_folder: Optional[str] = None,
@@ -73,13 +74,13 @@ class Trainer:
         train_loaders: DataLoaderTuple
         valid_loaders: DataLoaderTuple
 
-        df_train, df_fitz_34, df_fitz_56, mel_idx = get_df()
+        df_train, df_val, df_test, mel_idx = get_df()
 
         if ARGS.DEBUG:
             df_train = df_train.sample(ARGS.batch_size * 3)
 
         self.df_train = df_train
-        self.df_valid = df_fitz_56
+        self.df_valid = df_val
 
         # transforms = get_transforms()
         #
@@ -92,7 +93,7 @@ class Trainer:
 
         dataset_valid = GenericImageDataset(csv=self.df_valid)
         valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=ARGS.batch_size,
-                                                   sampler=RandomSampler(dataset_train),
+                                                   sampler=RandomSampler(dataset_valid),
                                                    num_workers=ARGS.num_workers, drop_last=True)
 
         # train_loaders, valid_loaders = make_train_and_valid_loaders(
@@ -156,24 +157,24 @@ class Trainer:
             self._update_sampling_histogram(epoch)
 
             # Training
-            train_loss, train_acc = self._train_epoch()
+            train_loss, train_acc, train_auc = self._train_epoch()
             epoch_train_t = datetime.datetime.now() - epoch_start_t
             logger.info(f"epoch {epoch+1}/{epochs}::Training done")
-            logger.info(f"epoch {epoch+1}/{epochs} => train_loss={train_loss:.2f}, train_acc={train_acc:.2f}")
+            logger.info(f"epoch {epoch+1}/{epochs} => train_loss={train_loss:.2f}, train_acc={train_acc:.2f}, train_auc={train_auc:.2f}")
 
             # Validation
             logger.info("Starting validation")
-            val_loss, val_acc = self._eval_epoch(epoch)
+            val_loss, val_acc, val_auc = self._eval_epoch(epoch)
             epoch_val_t = datetime.datetime.now() - epoch_start_t
             logger.info(f"epoch {epoch+1}/{epochs}::Validation done")
-            logger.info(f"epoch {epoch+1}/{epochs} => val_loss={val_loss:.2f}, val_acc={val_acc:.2f}")
+            logger.info(f"epoch {epoch+1}/{epochs} => val_loss={val_loss:.2f}, val_acc={val_acc:.2f}, val_auc={val_auc:.2f}")
 
             # Print reconstruction
             # valid_data = concat_datasets(self.valid_loaders.dataset, self.valid_loaders.nonfaces.dataset, proportion_a=0.5)
             self.print_reconstruction(self.model, self.valid_loader.dataset, epoch, self.device)
 
             # Save model and scores
-            self._save_epoch(epoch, train_loss, val_loss, train_acc, val_acc)
+            self._save_epoch(epoch, train_loss, val_loss, train_acc, train_auc, val_acc, val_auc)
 
         logger.success(f"Finished training on {epochs} epochs.")
 
@@ -209,7 +210,7 @@ class Trainer:
             return fig
 
 
-    def _save_epoch(self, epoch: int, train_loss: float, val_loss: float, train_acc: float, val_acc: float):
+    def _save_epoch(self, epoch: int, train_loss: float, val_loss: float, train_acc: float, train_auc, val_acc: float, val_auc):
         """Writes training and validation scores to a csv, and stores a model to disk."""
         if not self.run_folder:
             logger.warning(f"`--run_folder` could not be found.",
@@ -222,7 +223,7 @@ class Trainer:
         # Write epoch metrics
         path_to_results = f"results/{self.run_folder}/training_results.csv"
         with open(path_to_results, "a") as wf:
-            wf.write(f"{epoch}, {train_loss}, {val_loss}, {train_acc}, {val_acc}\n")
+            wf.write(f"{epoch}, {train_loss}, {val_loss}, {train_acc}, {train_auc}, {val_acc}, {val_auc}\n")
 
         # Write model to disk
         path_to_model = f"results/{self.run_folder}/model.pt"
@@ -265,10 +266,14 @@ class Trainer:
         self.model.eval()
         avg_loss = 0
         avg_acc = 0
+        avg_auc = 0
 
         all_labels = torch.tensor([], dtype=torch.long).to(self.device)
         all_preds = torch.tensor([]).to(self.device)
         all_idxs = torch.tensor([], dtype=torch.long).to(self.device)
+
+        LABELS = []
+        SIGOUT = []
 
         count = 0
 
@@ -278,24 +283,32 @@ class Trainer:
                 images = images.to(self.device)
                 labels = labels.to(self.device)
                 idxs = idxs.to(self.device)
-                pred, loss = self.model.forward(images, labels)
+                pred, loss, sigout = self.model.forward(images, labels)
 
                 loss = loss.mean()
                 acc = utils.calculate_accuracy(labels, pred)
 
+
                 avg_loss += loss.item()
                 avg_acc += acc
+                # avg_auc += a_u_c
 
                 all_labels = torch.cat((all_labels, labels))
                 all_preds = torch.cat((all_preds, pred))
                 all_idxs = torch.cat((all_idxs, idxs))
 
+                LABELS.append(labels.detach().cpu())
+                SIGOUT.append(sigout.detach().cpu())
+
                 count = i
+        LABELS = torch.cat(LABELS).numpy()
+        SIGOUT = torch.cat(SIGOUT).numpy()
+        a_u_c = utils.calculate_AUC(LABELS, SIGOUT)
 
         best_faces, worst_faces, best_other, worst_other = utils.get_best_and_worst_predictions(all_labels, all_preds, self.device)
         self.visualize_best_and_worst(self.valid_loader, all_labels, all_idxs, epoch, best_faces, worst_faces, best_other, worst_other)
 
-        return avg_loss/(count+1), avg_acc/(count+1)
+        return avg_loss/(count+1), avg_acc/(count+1), a_u_c #avg_auc/(count+1)
 
     def _train_epoch(self):
         """Trains the model for one epoch."""
@@ -309,7 +322,11 @@ class Trainer:
 
         avg_loss: float = 0
         avg_acc: float = 0
+        avg_auc = 0
         count: int = 0
+
+        LABELS = []
+        SIGOUT = []
 
         train_loss = []
 
@@ -317,7 +334,7 @@ class Trainer:
         for i, (images, labels, _, _) in enumerate(bar):
             # Forward pass
             images, labels = images.to(self.device), labels.to(self.device) #, fitz.to(device)  # sending data to GPU
-            pred, loss = self.model.forward(images, labels)
+            pred, loss, sigout = self.model.forward(images, labels)
 
             # Calculate the gradient, and clip at 5
             self.optimizer.zero_grad()
@@ -330,18 +347,26 @@ class Trainer:
             acc = utils.calculate_accuracy(labels, pred)
             avg_loss += loss.item()
             avg_acc += acc
+            # avg_auc += a_u_c
 
             if i % self.eval_freq == 0:
-                logger.info(f"Training: batch:{i} accuracy:{acc}")
+                logger.info(f"Training: batch:{i} accuracy:{acc}") # , AUC:{a_u_c}")
 
             loss_np = loss.detach().cpu().numpy()  # sending loss to cpu
             train_loss.append(loss_np)  # appending loss to loss list
             smooth_loss = sum(train_loss[-100:]) / min(len(train_loss), 100)  # calculating smooth loss
 
+            LABELS.append(labels.detach().cpu())
+            SIGOUT.append(sigout.detach().cpu())
+
             count = i
             bar.set_description('loss: %.5f, smth: %.5f' % (loss_np, smooth_loss))  # metrics for loading bar
 
-        return avg_loss/(count+1), avg_acc/(count+1)
+        LABELS = torch.cat(LABELS).numpy()
+        SIGOUT = torch.cat(SIGOUT).numpy()
+        a_u_c = utils.calculate_AUC(LABELS, SIGOUT)
+
+        return avg_loss/(count+1), avg_acc/(count+1), a_u_c #avg_auc/(count+1)
 
     def _update_sampling_histogram(self, epoch: int):
         """Updates the data loader for faces to be proportional to how challenge each image is, in case

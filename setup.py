@@ -15,7 +15,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Parse arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('--DEBUG', action='store_true')
-parser.add_argument('--image-dir', type=str, default='/data/images/fitzpatrick17k_256')
+parser.add_argument('--image-dir', type=str, default='./data/images/')
 parser.add_argument('--csv-dir', type=str, default='./data/csv')
 parser.add_argument('--batch_size', type=int, help='size of batch', default=64)
 parser.add_argument('--num_workers', type=int, help='number of workers', default=16)
@@ -30,7 +30,7 @@ parser.add_argument("--path_to_model", type=str, help='Path to stored model')
 parser.add_argument("--debug_mode", type=bool, help='Debug mode')
 parser.add_argument("--use_h5", type=bool, help='Use h5')
 parser.add_argument("--folder_name", type=str, help='folder_name_to_save in')
-parser.add_argument("--eval_name", type=str, help='eval name')
+parser.add_argument("--eval-name", type=str, help='eval name')
 parser.add_argument('--stride', type=float, help='importance of debiasing')
 parser.add_argument('--eval_dataset', type=str, help='Name of eval dataset [ppb/h5_imagenet/h5]')
 parser.add_argument('--save_sub_images', type=bool, help='Save images')
@@ -77,12 +77,12 @@ class Config:
     # Folder name of the run
     run_folder: str = '' if ARGS.folder_name is None else ARGS.folder_name
     # Path to CelebA images
-    path_to_fp17k_images: str = '/data/images/fitzpatrick17k_256'
+    path_to_fp17k_images: str = '../data/images/fitzpatrick17k_256/'
     # Path to ISIC 202 images
-    path_to_isic20_images: str = '/data/images/isic_20_train_256'
+    path_to_isic20_images: str = './data/images/isic_20_train_256'
 
-    # # Path to evaluation images (Faces)
-    # path_to_eval_face_images: str = 'data/ppb/PPB-2017/imgs'
+    # Path to evaluation images (Faces)
+    path_to_eval_face_images: str = '/data/images/fitzpatrick17k_256'
     # # Path to evaluation metadata
     # path_to_eval_metadata: str = 'data/ppb/PPB-2017/PPB-2017-metadata.csv'
     # # Path to evaluation images (Nonfaces such as Imagenet)

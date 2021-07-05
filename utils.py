@@ -6,17 +6,29 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data.sampler import SequentialSampler
 from torch.utils.data import ConcatDataset, DataLoader
+import torch
 import torchvision.transforms as transforms
 from torchvision.utils import make_grid
 import gc
 from collections import Counter
 from PIL import Image
+from sklearn.metrics import roc_auc_score, confusion_matrix
 
 from dataset import sample_dataset, sample_idxs_from_loader #, sample_idxs_from_loaders
 
 def calculate_accuracy(labels, pred):
     """Calculates accuracy given labels and predictions."""
     return float(((pred > 0) == (labels > 0)).sum()) / labels.size()[0]
+
+def calculate_AUC(labels, sigout):
+    return roc_auc_score((labels == 1).astype(float), sigout[:, 1])
+
+def calculate_sens_spec(labels, sigout):
+    cm = confusion_matrix((labels == 1).astype(float), sigout[:, 1]) #defining confusion matrix
+    tn, fp, fn, tp = cm[0][0], cm[0][1], cm[1][0], cm[1][1]  # getting confusion matrix values
+    sensitivity = tp / (tp + fn)  # calculating sensitivity
+    specificity = tn / (tn + fp)  # calculating specificity
+    return sensitivity, specificity
 
 def get_best_and_worst_predictions(labels, pred, device):
     """Returns indices of the best and worst predicted faces."""

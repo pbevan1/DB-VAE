@@ -42,25 +42,34 @@ class Encoder(nn.Module):
             nn.Conv2d(1024, 2048, kernel_size=5, stride=2),
             nn.LeakyReLU(),
             nn.BatchNorm2d(2048),
+
+            nn.Conv2d(2048, 4096, kernel_size=5, stride=2),
+            nn.LeakyReLU(),
+            nn.BatchNorm2d(4096),
+
             nn.Flatten(),
 
-            nn.Linear(2048, 1000),
+            nn.Linear(4096, 1000),
             nn.LeakyReLU(),
 
             nn.Linear(1000, z_dim*2+1)
         )
+
+        self.sigmoid = nn.Sigmoid()
 
 
     def forward(self, input: torch.Tensor):
         """
         Perform forward pass of encoder.
         """
-        print(f'input shape: {input.shape}')
+        # print(f'input shape: {input.shape}')
         out = self.layers(input)
-        print(f'out shape: {out.shape}')
+        # print(f'out shape: {out.shape}')
+
+        sigout = self.sigmoid(out)
 
         # return classification, mean and log_std
-        return out[:, 0], out[:, 1:self.z_dim+1], F.softplus(out[:,self.z_dim+1:])
+        return out[:, 0], out[:, 1:self.z_dim+1], F.softplus(out[:,self.z_dim+1:]), sigout ################## adjust rest of code to use this
 
 
 class UnFlatten(nn.Module):
@@ -70,7 +79,7 @@ class UnFlatten(nn.Module):
         self.image_size = image_size
 
     def forward(self, input):
-        print(f'out shape: {input.shape}')
+        # print(f'out shape: {input.shape}')
         return input.view(-1, self.channel_size, self.image_size, self.image_size)
 
 class Decoder(nn.Module):
@@ -89,8 +98,12 @@ class Decoder(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(z_dim, 1000),
             nn.LeakyReLU(),
-            nn.Linear(1000, 2048*1*1),
-            UnFlatten(2048, 1),
+            nn.Linear(1000, 4096*1*1),
+            UnFlatten(4096, 1),
+
+            nn.ConvTranspose2d(4096, 2048, kernel_size=5, stride=2),
+            nn.LeakyReLU(),
+            nn.BatchNorm2d(2048),
 
             nn.ConvTranspose2d(2048, 1024, kernel_size=5, stride=2),
             nn.LeakyReLU(),
@@ -113,9 +126,9 @@ class Decoder(nn.Module):
         Perform forward pass of encoder.
         """
 
-        print(f'out shape: {input.shape}')
+        # print(f'out shape: {input.shape}')
         out = self.layers(input)
-        print(f'out shape: {out.shape}')
+        # print(f'out shape: {out.shape}')
 
         return out
 
@@ -185,7 +198,7 @@ class Db_vae(nn.Module):
         Given images, perform an encoding and decoding step and return the
         negative average elbo for the given batch.
         """
-        pred, mean, std = self.encoder(images)
+        pred, mean, std, sigout = self.encoder(images)
 
         loss_class = F.binary_cross_entropy_with_logits(pred, labels.float(), reduction='none')
 
@@ -217,7 +230,7 @@ class Db_vae(nn.Module):
 
         loss_total = loss_total + zeros
 
-        return pred, loss_total
+        return pred, loss_total, sigout
 
     def forward_eval(self, images: torch.Tensor):
         """
@@ -225,14 +238,14 @@ class Db_vae(nn.Module):
         negative average elbo for the given batch.
         """
         with torch.no_grad():
-            pred, _,_ = self.encoder(images)
+            pred, _,_, sigout = self.encoder(images)
 
-        return pred
+        return pred, sigout
 
 
     def interpolate(self, images: torch.Tensor, amount: int):
         with torch.no_grad():
-            _, mean, std = self.encoder(images)
+            _, mean, std, _ = self.encoder(images)
 
             mean_1, std_1 = mean[0,:], std[0,:]
             mean_2, std_2 = mean[1,:], std[1,:]
@@ -260,8 +273,8 @@ class Db_vae(nn.Module):
         return recon_images
 
     def build_means(self, input: torch.Tensor):
-        print(f'build_means input: {input.shape}')
-        _, mean, log_std = self.encoder(input)
+        # print(f'build_means input: {input.shape}')
+        _, mean, log_std, _ = self.encoder(input)
 
         self.means = torch.cat((self.means, mean))
 
@@ -275,7 +288,7 @@ class Db_vae(nn.Module):
             Make sure you only put faces into this
             functions
         """
-        _, mean, std = self.encoder(input)
+        _, mean, std, _ = self.encoder(input)
 
         self.means = torch.cat((self.means, mean))
         self.std = torch.cat((self.std, std))
@@ -364,7 +377,7 @@ class Db_vae(nn.Module):
 
     def recon_images(self, images: torch.Tensor):
         with torch.no_grad():
-            pred, mean, std = self.encoder(images)
+            pred, mean, std, _ = self.encoder(images)
 
             # Get single samples from the distributions with reparametrisation trick
             dist = torch.distributions.normal.Normal(mean, std)
