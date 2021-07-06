@@ -80,6 +80,7 @@ class Trainer:
             df_train = df_train.sample(ARGS.batch_size * 3)
 
         self.df_train = df_train
+        self.train_len = len(df_train)
         self.df_valid = df_val
 
         # transforms = get_transforms()
@@ -191,13 +192,13 @@ class Trainer:
         fig=plt.figure(figsize=(16, 8))
 
         fig.add_subplot(1, 2, 1)
-        grid = make_grid(images.reshape(n_samples,3,256,256), n_rows)
+        grid = make_grid(images.reshape(n_samples,3,128,128), n_rows)
         plt.imshow(grid.permute(1,2,0).cpu())
 
         utils.remove_frame(plt)
 
         fig.add_subplot(1, 2, 2)
-        grid = make_grid(recon_images.reshape(n_samples,3,256,256), n_rows)
+        grid = make_grid(recon_images.reshape(n_samples,3,128,128), n_rows)
         plt.imshow(grid.permute(1,2,0).cpu())
 
         utils.remove_frame(plt)
@@ -247,7 +248,7 @@ class Trainer:
 
         for i in range(2):
             ax = fig.add_subplot(1, 2, i+1)
-            grid = make_grid(img_list[i].reshape(n_samples,3,256,256), n_rows)
+            grid = make_grid(img_list[i].reshape(n_samples,3,128,128), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
             ax.set_title(titles[i], fontdict={"fontsize":30})
 
@@ -349,7 +350,7 @@ class Trainer:
             avg_acc += acc
             # avg_auc += a_u_c
 
-            if i % self.eval_freq == 0:
+            if i == self.train_len/ARGS.batch_size: # 48: #% self.eval_freq == 0:
                 logger.info(f"Training: batch:{i} accuracy:{acc}") # , AUC:{a_u_c}")
 
             loss_np = loss.detach().cpu().numpy()  # sending loss to cpu
@@ -428,7 +429,7 @@ class Trainer:
         sample_images = self.model.sample(n_samples = n_samples)
 
         plt.figure(figsize=(n_rows*2,n_rows*2))
-        grid = make_grid(sample_images.reshape(n_samples,3,256,256), n_rows)
+        grid = make_grid(sample_images.reshape(n_samples,3,128,128), n_rows)
         plt.imshow(grid.permute(1,2,0).cpu())
 
         utils.remove_frame(plt)
@@ -457,7 +458,7 @@ class Trainer:
             images = utils.sample_idxs_from_loader(indices, data_loader, labels[0])
 
             ax = fig.add_subplot(2, 2, i+1)
-            grid = make_grid(images.reshape(n_samples,3,256,256), n_rows)
+            grid = make_grid(images.reshape(n_samples,3,128,128), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
             ax.set_title(sub_titles[i], fontdict={"fontsize":30})
 

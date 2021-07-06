@@ -15,6 +15,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Parse arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('--DEBUG', action='store_true')
+parser.add_argument('--DP', action='store_true')
 parser.add_argument('--image-dir', type=str, default='./data/images/')
 parser.add_argument('--csv-dir', type=str, default='./data/csv')
 parser.add_argument('--run-folder', type=str, default='outputs')
@@ -79,7 +80,7 @@ class Config:
     # Folder name of the run
     run_folder: str = '' if ARGS.folder_name is None else ARGS.folder_name
     # Path to CelebA images
-    path_to_fp17k_images: str = '../data/images/fitzpatrick17k_256/'
+    path_to_fp17k_images: str = '../data/images/fitzpatrick17k_128/'
     # Path to ISIC 202 images
     path_to_isic20_images: str = './data/images/isic_20_train_256'
 

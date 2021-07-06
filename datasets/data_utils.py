@@ -47,7 +47,7 @@ class DatasetOutput(NamedTuple):
 
 # Default transform
 default_transform = A.Compose([
-    A.Resize(256, 256),
+    A.Resize(128, 128),
     A.Normalize()
 ])
 
@@ -76,7 +76,7 @@ def apply_window_resize(img: torch.Tensor, win_size: int):
 
     img_transforms = transforms.Compose([
         pil_transform,
-        transforms.Resize((256, 256)),
+        transforms.Resize((128, 128)),
         transforms.ToTensor()
     ])
 

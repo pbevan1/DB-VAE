@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from scipy.stats import norm
+from setup import *
 
 class Encoder(nn.Module):
     """
@@ -47,13 +48,9 @@ class Encoder(nn.Module):
             nn.LeakyReLU(),
             nn.BatchNorm2d(4096),
 
-            nn.Conv2d(4096, 8192, kernel_size=5, stride=2),
-            nn.LeakyReLU(),
-            nn.BatchNorm2d(8192),
-
             nn.Flatten(),
 
-            nn.Linear(8192, 1000),
+            nn.Linear(4096, 1000),
             nn.LeakyReLU(),
 
             nn.Linear(1000, z_dim*2+1)
@@ -66,9 +63,9 @@ class Encoder(nn.Module):
         """
         Perform forward pass of encoder.
         """
-        print(f'input shape: {input.shape}')
+        # print(f'input shape: {input.shape}')
         out = self.layers(input)
-        print(f'out shape: {out.shape}')
+        # print(f'out shape: {out.shape}')
 
         sigout = self.sigmoid(out)
 
@@ -102,12 +99,8 @@ class Decoder(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(z_dim, 1000),
             nn.LeakyReLU(),
-            nn.Linear(1000, 8192*1*1),
-            UnFlatten(8192, 1),
-
-            nn.ConvTranspose2d(8192, 4096, kernel_size=5, stride=2),
-            nn.LeakyReLU(),
-            nn.BatchNorm2d(4096),
+            nn.Linear(1000, 4096*1*1),
+            UnFlatten(4096, 1),
 
             nn.ConvTranspose2d(4096, 2048, kernel_size=5, stride=2),
             nn.LeakyReLU(),
@@ -159,6 +152,10 @@ class Db_vae(nn.Module):
 
         self.encoder = Encoder(z_dim, custom_encoding_layers)
         self.decoder = Decoder(z_dim, custom_decoding_layers)
+
+        if ARGS.DP:
+            self.encoder = nn.DataParallel(self.encoder)
+            self.decoder = nn.DataParallel(self.decoder)
 
         self.target_dist = torch.distributions.normal.Normal(0, 1)
 
@@ -353,7 +350,7 @@ class Db_vae(nn.Module):
         probs = probs.sort(1, descending=True)[0][:,:5]
         probs = probs.prod(1)
 
-        print(probs)
+        # print(probs)
         return probs
 
     def get_histo_gaussian(self):

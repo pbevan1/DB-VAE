@@ -114,7 +114,7 @@ def get_df():
         else:
             df_train.loc[df_train['url'] == url, 'image_name'] = url.split('/', -1)[-1]
     # adding column with path to file
-    df_train['filepath'] = df_train['image_name'].apply(lambda x: f'{ARGS.image_dir}/fitzpatrick17k_256/{x}')
+    df_train['filepath'] = df_train['image_name'].apply(lambda x: f'{ARGS.image_dir}/fitzpatrick17k_128/{x}')
     # mapping fitzpatrick image to class index
     fp2idx = {d: idx for idx, d in enumerate(sorted(df_train['fitzpatrick'].unique()))}
     df_train['fitzpatrick'] = df_train['fitzpatrick'].map(fp2idx)
@@ -141,7 +141,7 @@ def get_df():
 def get_transforms():
     #augmentations for all training data
     transforms = A.Compose([
-        A.Resize(256, 256),
+        A.Resize(128, 128),
         A.Normalize()#mean, std)
     ])
     return transforms
