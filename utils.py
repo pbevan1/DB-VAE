@@ -16,6 +16,13 @@ from sklearn.metrics import roc_auc_score, confusion_matrix
 
 from dataset import sample_dataset, sample_idxs_from_loader #, sample_idxs_from_loaders
 
+
+# inverse transform to get normalize image back to original form for visualization
+inv_normalize = transforms.Normalize(
+    mean=[-0.485/0.229, -0.456/0.224, -0.406/0.255],
+    std=[1/0.229, 1/0.224, 1/0.255]
+)
+
 def calculate_accuracy(labels, pred):
     """Calculates accuracy given labels and predictions."""
     return float(((pred > 0) == (labels > 0)).sum()) / labels.size()[0]

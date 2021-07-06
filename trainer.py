@@ -204,7 +204,7 @@ class Trainer:
         utils.remove_frame(plt)
 
         if save:
-            fig.savefig(f'results/{self.config.run_folder}/reconstructions/epoch_{epoch+1}.png', bbox_inches='tight')
+            fig.savefig(f'results/{self.config.run_folder}/reconstructions/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
 
             plt.close()
         else:
@@ -239,25 +239,39 @@ class Trainer:
         highest_probs = probs.argsort(descending=True)[:n_samples]
         lowest_probs = probs.argsort()[:n_samples]
 
-        highest_imgs = utils.sample_idxs_from_loader(all_index[highest_probs], data_loader, 1)
-        worst_imgs = utils.sample_idxs_from_loader(all_index[lowest_probs], data_loader, 1)
+        print(lowest_probs)
 
-        img_list = (highest_imgs, worst_imgs)
-        titles = ("Highest weights", "Lowest weights")
+        mean_probs = [np.mean(lowest_probs.detach().cpu().numpy()),
+                      np.mean(highest_probs.detach().cpu().numpy())]
+
+        highest_imgs = utils.sample_idxs_from_loader(all_index[highest_probs], data_loader, 1)
+        lowest_imgs = utils.sample_idxs_from_loader(all_index[lowest_probs], data_loader, 1)
+
+        for i, (im, im2) in enumerate(zip(highest_imgs, lowest_imgs)):
+            with torch.no_grad():
+                im = im.unsqueeze_(0)
+                im2 = im2.unsqueeze_(0)
+                im = utils.inv_normalize(im[0])
+                im2 = utils.inv_normalize(im2[0])
+                highest_imgs[i] = im
+                lowest_imgs[i] = im2
+
+        img_list = (highest_imgs, lowest_imgs)
+        titles = ("Least Represented", "Most Represented")
         fig = plt.figure(figsize=(16, 16))
 
         for i in range(2):
             ax = fig.add_subplot(1, 2, i+1)
             grid = make_grid(img_list[i].reshape(n_samples,3,128,128), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
-            ax.set_title(titles[i], fontdict={"fontsize":30})
+            ax.set_title(f'{titles[i]}\nMean Sample Prob: {mean_probs[i]}', fontdict={"fontsize":18}, pad=20)
 
             utils.remove_frame(plt)
 
         path_to_results = f"results/{self.config.run_folder}/bias_probs/epoch_{epoch+1}.png"
         logger.save(f"Saving a bias probability figure in {path_to_results}")
 
-        fig.savefig(path_to_results, bbox_inches='tight')
+        fig.savefig(path_to_results, bbox_inches='tight', dpi=300)
         plt.close()
 
 
@@ -443,7 +457,7 @@ class Trainer:
 
         fig=plt.figure(figsize=(16, 16))
 
-        sub_titles = ["Best faces", "Worst faces", "Best non-faces", "Worst non-faces"]
+        sub_titles = ["Best melanoma", "Worst melanoma", "Best benign", "Worst benign"]
         for i, indices in enumerate((best_faces, worst_faces, best_other, worst_other)):
             labels, indices = all_labels[indices], all_indices[indices]
             images = utils.sample_idxs_from_loader(indices, data_loader, labels[0])
@@ -456,7 +470,7 @@ class Trainer:
             utils.remove_frame(plt)
 
         if save:
-            fig.savefig(f'results/{self.config.run_folder}/best_and_worst/epoch_{epoch+1}.png', bbox_inches='tight')
+            fig.savefig(f'results/{self.config.run_folder}/best_and_worst/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
 
             plt.close()
 
