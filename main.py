@@ -103,6 +103,7 @@ if __name__ == "__main__":
 
           trainer = make_trainer(config)
           trainer.train()
+          trainer.best_and_worst()
 
           evaluator = make_evaluator(config, trainer.model)
           evaluator.eval_on_setups('run_mode')

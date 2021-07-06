@@ -165,17 +165,17 @@ class Trainer:
 
             # Validation
             logger.info("Starting validation")
-            val_loss, val_acc, val_auc = self._eval_epoch(epoch)
+            val_loss, val_acc = self._eval_epoch(epoch)
             epoch_val_t = datetime.datetime.now() - epoch_start_t
             logger.info(f"epoch {epoch+1}/{epochs}::Validation done")
-            logger.info(f"epoch {epoch+1}/{epochs} => val_loss={val_loss:.2f}, val_acc={val_acc:.2f}, val_auc={val_auc:.2f}")
+            logger.info(f"epoch {epoch+1}/{epochs} => val_loss={val_loss:.2f}, val_acc={val_acc:.2f}")
 
             # Print reconstruction
             # valid_data = concat_datasets(self.valid_loaders.dataset, self.valid_loaders.nonfaces.dataset, proportion_a=0.5)
             self.print_reconstruction(self.model, self.valid_loader.dataset, epoch, self.device)
 
             # Save model and scores
-            self._save_epoch(epoch, train_loss, val_loss, train_acc, train_auc, val_acc, val_auc)
+            self._save_epoch(epoch, train_loss, val_loss, train_acc, train_auc, val_acc)
 
         logger.success(f"Finished training on {epochs} epochs.")
 
@@ -204,14 +204,14 @@ class Trainer:
         utils.remove_frame(plt)
 
         if save:
-            fig.savefig(f'results/{self.config.run_folder}/reconstructions/epoch={epoch}', bbox_inches='tight')
+            fig.savefig(f'results/{self.config.run_folder}/reconstructions/epoch_{epoch+1}.png', bbox_inches='tight')
 
             plt.close()
         else:
             return fig
 
 
-    def _save_epoch(self, epoch: int, train_loss: float, val_loss: float, train_acc: float, train_auc, val_acc: float, val_auc):
+    def _save_epoch(self, epoch: int, train_loss: float, val_loss: float, train_acc: float, train_auc, val_acc: float):
         """Writes training and validation scores to a csv, and stores a model to disk."""
         if not self.run_folder:
             logger.warning(f"`--run_folder` could not be found.",
@@ -224,7 +224,7 @@ class Trainer:
         # Write epoch metrics
         path_to_results = f"results/{self.run_folder}/training_results.csv"
         with open(path_to_results, "a") as wf:
-            wf.write(f"{epoch}, {train_loss}, {val_loss}, {train_acc}, {train_auc}, {val_acc}, {val_auc}\n")
+            wf.write(f"{epoch+1}, {train_loss}, {val_loss}, {train_acc}, {train_auc}, {val_acc}\n")
 
         # Write model to disk
         path_to_model = f"results/{self.run_folder}/model.pt"
@@ -254,7 +254,7 @@ class Trainer:
 
             utils.remove_frame(plt)
 
-        path_to_results = f"results/{self.config.run_folder}/bias_probs/epoch={epoch}"
+        path_to_results = f"results/{self.config.run_folder}/bias_probs/epoch_{epoch+1}.png"
         logger.save(f"Saving a bias probability figure in {path_to_results}")
 
         fig.savefig(path_to_results, bbox_inches='tight')
@@ -272,9 +272,6 @@ class Trainer:
         all_labels = torch.tensor([], dtype=torch.long).to(self.device)
         all_preds = torch.tensor([]).to(self.device)
         all_idxs = torch.tensor([], dtype=torch.long).to(self.device)
-
-        LABELS = []
-        SIGOUT = []
 
         count = 0
 
@@ -298,18 +295,12 @@ class Trainer:
                 all_preds = torch.cat((all_preds, pred))
                 all_idxs = torch.cat((all_idxs, idxs))
 
-                LABELS.append(labels.detach().cpu())
-                SIGOUT.append(sigout.detach().cpu())
-
                 count = i
-        LABELS = torch.cat(LABELS).numpy()
-        SIGOUT = torch.cat(SIGOUT).numpy()
-        a_u_c = utils.calculate_AUC(LABELS, SIGOUT)
 
         best_faces, worst_faces, best_other, worst_other = utils.get_best_and_worst_predictions(all_labels, all_preds, self.device)
         self.visualize_best_and_worst(self.valid_loader, all_labels, all_idxs, epoch, best_faces, worst_faces, best_other, worst_other)
 
-        return avg_loss/(count+1), avg_acc/(count+1), a_u_c #avg_auc/(count+1)
+        return avg_loss/(count+1), avg_acc/(count+1)
 
     def _train_epoch(self):
         """Trains the model for one epoch."""
@@ -465,7 +456,7 @@ class Trainer:
             utils.remove_frame(plt)
 
         if save:
-            fig.savefig(f'results/{self.config.run_folder}/best_and_worst/epoch:{epoch}', bbox_inches='tight')
+            fig.savefig(f'results/{self.config.run_folder}/best_and_worst/epoch_{epoch+1}.png', bbox_inches='tight')
 
             plt.close()
 
