@@ -7,6 +7,7 @@ from tqdm import tqdm
 from logger import logger
 from torch.utils.data.dataset import Dataset
 import numpy as np
+from decimal import Decimal
 
 from setup import init_trainining_results
 from vae_model import Db_vae
@@ -158,10 +159,10 @@ class Trainer:
             self._update_sampling_histogram(epoch)
 
             # Training
-            train_loss, train_acc, train_auc = self._train_epoch()
+            train_loss, train_acc = self._train_epoch()
             epoch_train_t = datetime.datetime.now() - epoch_start_t
             logger.info(f"epoch {epoch+1}/{epochs}::Training done")
-            logger.info(f"epoch {epoch+1}/{epochs} => train_loss={train_loss:.2f}, train_acc={train_acc:.2f}, train_auc={train_auc:.2f}")
+            logger.info(f"epoch {epoch+1}/{epochs} => train_loss={train_loss:.2f}, train_acc={train_acc:.2f}")
 
             # Validation
             logger.info("Starting validation")
@@ -175,7 +176,8 @@ class Trainer:
             self.print_reconstruction(self.model, self.valid_loader.dataset, epoch, self.device)
 
             # Save model and scores
-            self._save_epoch(epoch, train_loss, val_loss, train_acc, train_auc, val_acc)
+            if epoch == ARGS.save_epoch:
+                self._save_epoch(epoch, train_loss, val_loss, train_acc, val_acc)
 
         logger.success(f"Finished training on {epochs} epochs.")
 
@@ -211,7 +213,7 @@ class Trainer:
             return fig
 
 
-    def _save_epoch(self, epoch: int, train_loss: float, val_loss: float, train_acc: float, train_auc, val_acc: float):
+    def _save_epoch(self, epoch: int, train_loss: float, val_loss: float, train_acc: float, val_acc: float):
         """Writes training and validation scores to a csv, and stores a model to disk."""
         if not self.run_folder:
             logger.warning(f"`--run_folder` could not be found.",
@@ -224,7 +226,7 @@ class Trainer:
         # Write epoch metrics
         path_to_results = f"results/{self.run_folder}/training_results.csv"
         with open(path_to_results, "a") as wf:
-            wf.write(f"{epoch+1}, {train_loss}, {val_loss}, {train_acc}, {train_auc}, {val_acc}\n")
+            wf.write(f"{epoch+1}, {train_loss}, {val_loss}, {train_acc}, {val_acc}\n")
 
         # Write model to disk
         path_to_model = f"results/{self.run_folder}/model.pt"
@@ -236,16 +238,20 @@ class Trainer:
         # TODO: Add annotation
         n_samples = n_rows ** 2
 
-        highest_probs = probs.argsort(descending=True)[:n_samples]
-        lowest_probs = probs.argsort()[:n_samples]
+        highest_probs_idx = probs.argsort(descending=True)[:n_samples]
+        lowest_probs_idx = probs.argsort()[:n_samples]
 
-        print(lowest_probs)
+        # print(probs)
+        # print(probs[highest_probs_idx])
+        # print(probs[lowest_probs_idx])
 
-        mean_probs = [np.mean(lowest_probs.detach().cpu().numpy()),
-                      np.mean(highest_probs.detach().cpu().numpy())]
+        mean_probs = [np.mean(probs[highest_probs_idx].detach().cpu().numpy()),
+                      np.mean(probs[lowest_probs_idx].detach().cpu().numpy())]
 
-        highest_imgs = utils.sample_idxs_from_loader(all_index[highest_probs], data_loader, 1)
-        lowest_imgs = utils.sample_idxs_from_loader(all_index[lowest_probs], data_loader, 1)
+        print(mean_probs)
+
+        highest_imgs = utils.sample_idxs_from_loader(all_index[highest_probs_idx], data_loader, 1)
+        lowest_imgs = utils.sample_idxs_from_loader(all_index[lowest_probs_idx], data_loader, 1)
 
         for i, (im, im2) in enumerate(zip(highest_imgs, lowest_imgs)):
             with torch.no_grad():
@@ -257,14 +263,14 @@ class Trainer:
                 lowest_imgs[i] = im2
 
         img_list = (highest_imgs, lowest_imgs)
-        titles = ("Least Represented", "Most Represented")
+        titles = ("Most Biased", "Least Biased")
         fig = plt.figure(figsize=(16, 16))
 
         for i in range(2):
             ax = fig.add_subplot(1, 2, i+1)
             grid = make_grid(img_list[i].reshape(n_samples,3,128,128), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
-            ax.set_title(f'{titles[i]}\nMean Sample Prob: {mean_probs[i]}', fontdict={"fontsize":18}, pad=20)
+            ax.set_title(f'{titles[i]}\nMean Sample Prob: {Decimal(str(mean_probs[i]))}', fontdict={"fontsize":18}, pad=20)
 
             utils.remove_frame(plt)
 
@@ -331,9 +337,6 @@ class Trainer:
         avg_auc = 0
         count: int = 0
 
-        LABELS = []
-        SIGOUT = []
-
         train_loss = []
 
         bar = tqdm(self.train_loader)
@@ -362,17 +365,10 @@ class Trainer:
             train_loss.append(loss_np)  # appending loss to loss list
             smooth_loss = sum(train_loss[-100:]) / min(len(train_loss), 100)  # calculating smooth loss
 
-            LABELS.append(labels.detach().cpu())
-            SIGOUT.append(sigout.detach().cpu())
-
             count = i
             bar.set_description('loss: %.5f, smth: %.5f' % (loss_np, smooth_loss))  # metrics for loading bar
 
-        LABELS = torch.cat(LABELS).numpy()
-        SIGOUT = torch.cat(SIGOUT).numpy()
-        a_u_c = utils.calculate_AUC(LABELS, SIGOUT)
-
-        return avg_loss/(count+1), avg_acc/(count+1), a_u_c #avg_auc/(count+1)
+        return avg_loss/(count+1), avg_acc/(count+1)
 
     def _update_sampling_histogram(self, epoch: int):
         """Updates the data loader for faces to be proportional to how challenge each image is, in case

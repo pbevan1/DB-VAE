@@ -165,7 +165,7 @@ class Evaluator:
         logger.info(f"AUC => type 4: {aucs[3]:.3f}")
         logger.info(f"AUC => type 5: {aucs[4]:.3f}")
         logger.info(f"AUC => type 6: {aucs[5]:.3f}")
-        logger.info(f"Accuracy Variance => {auc_variance:.3f}")
+        logger.info(f"AUC Variance => {auc_variance:.3f}")
         # logger.info(f"Sensitivity => all: {avg_sens:.3f}")
         # logger.info(f"Sensitivity => type 1: {sensitivities[0]:.3f}")
         # logger.info(f"Sensitivity => type 2: {sensitivities[1]:.3f}")
