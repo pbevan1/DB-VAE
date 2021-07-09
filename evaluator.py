@@ -186,7 +186,7 @@ class Evaluator:
         # logger.info(f"Precision => {precision:.3f}")
 
         # Write final results
-        path_to_eval_results = f"results/{eval_name}"
+        path_to_eval_results = f"results/logs/{self.config.test_no}/results.txt"
         with open(path_to_eval_results, 'a+') as write_file:
 
             # If file has no header

@@ -140,6 +140,7 @@ class Decoder(nn.Module):
 class Db_vae(nn.Module):
     def __init__(
         self,
+        config=None,
         z_dim: int = 20,
         hist_size: int = 1000,
         alpha: float = 0.01,
@@ -152,7 +153,8 @@ class Db_vae(nn.Module):
 
         self.device = device
         self.z_dim = z_dim
-
+        self.config = config
+        self.run_mode = self.config.run_mode
         self.encoder = Encoder(z_dim, custom_encoding_layers)
         self.decoder = Decoder(z_dim, custom_decoding_layers)
 
@@ -177,8 +179,8 @@ class Db_vae(nn.Module):
         self.alpha = alpha
 
     @staticmethod
-    def init(path_to_model: str, device: str, z_dim: int):
-        full_path_to_model = f"results/{path_to_model}/model.pt"
+    def init(config, path_to_model: str, device: str, z_dim: int):
+        full_path_to_model = f"results/weights/{path_to_model}/model.pt"
         if not os.path.exists(full_path_to_model):
             logger.error(
                 f"Can't find model at {full_path_to_model}",
@@ -187,7 +189,7 @@ class Db_vae(nn.Module):
             )
             raise Exception
 
-        model: Db_vae = Db_vae(z_dim=z_dim, device=device)
+        model: Db_vae = Db_vae(config=config, z_dim=z_dim, device=device)
 
         try:
             model.load_state_dict(torch.load(full_path_to_model, map_location=device))
@@ -218,6 +220,9 @@ class Db_vae(nn.Module):
         # Get single samples from the distributions with reparametrisation trick
         dist = torch.distributions.normal.Normal(facemean, facestd)
         z = dist.rsample().to(self.device)
+
+        # if self.run_mode == 'perturb':
+        #     z = z[0]*2
 
         res = self.decoder(z)
 
@@ -392,6 +397,25 @@ class Db_vae(nn.Module):
             z = dist.rsample().to(self.device)
 
             recon_images = self.decoder(z)
+
+        # return predictions and the loss
+        return recon_images
+
+    def recon_images_perturb(self, images: torch.Tensor):
+        with torch.no_grad():
+            pred, mean, std, _ = self.encoder(images)
+
+            perturbation_range = self.config.perturbation_range
+            var_to_perturb = self.config.var_to_perturb
+            recon_images = []
+            for p in perturbation_range:
+                # Get single samples from the distributions with reparametrisation trick
+                dist = torch.distributions.normal.Normal(mean, std)
+                z = dist.rsample().squeeze().to(self.device)
+                # print(z[55])
+                z[var_to_perturb] = z[var_to_perturb] + p #multiplying specified latent variable by value in specified range
+                recon_image = self.decoder(z.unsqueeze(0))
+                recon_images.append(recon_image)
 
         # return predictions and the loss
         return recon_images

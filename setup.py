@@ -17,31 +17,34 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--DEBUG', action='store_true')
 parser.add_argument('--DP', action='store_true')
 parser.add_argument('--load-model', action='store_true')
+parser.add_argument('--fitzpatrick17k', action='store_true')
 parser.add_argument('--image-dir', type=str, default='./data/images/')
 parser.add_argument('--csv-dir', type=str, default='./data/csv')
 parser.add_argument('--run-folder', type=str, default='outputs')
 parser.add_argument('--test-no', type=int, default=0)
-parser.add_argument('--batch_size', type=int, help='size of batch', default=64)
-parser.add_argument('--num_workers', type=int, help='number of workers', default=16)
+parser.add_argument('--batch-size', type=int, help='size of batch', default=64)
+parser.add_argument('--num-workers', type=int, help='number of workers', default=16)
 parser.add_argument('--epochs', type=int, help='max number of epochs')
 # parser.add_argument('--save-epoch', type=int, help='epoch to save on', default=100)
-parser.add_argument('--z_dim', type=int, help='dimensionality of latent space')
+parser.add_argument('--z-dim', type=int, help='dimensionality of latent space')
 parser.add_argument('--alpha', type=float, help='importance of debiasing')
-parser.add_argument('--num_bins', type=int, help='importance of debiasing')
-parser.add_argument('--max_images', type=int, help='total size of database')
-parser.add_argument('--eval_freq', type=int, help='total size of database')
-parser.add_argument('--debias_type', type=str, help='type of debiasing used', default="max")
-parser.add_argument("--path_to_model", type=str, help='Path to stored model')
-parser.add_argument("--debug_mode", type=bool, help='Debug mode')
-parser.add_argument("--use_h5", type=bool, help='Use h5')
+parser.add_argument('--num-bins', type=int, help='importance of debiasing')
+parser.add_argument('--max-images', type=int, help='total size of database')
+parser.add_argument('--eval-freq', type=int, help='total size of database')
+parser.add_argument('--debias-type', type=str, help='type of debiasing used', default='none')
+parser.add_argument("--path-to-model", type=str, help='Path to stored model')
+parser.add_argument("--debug-mode", type=bool, help='Debug mode')
+parser.add_argument("--use-h5", type=bool, help='Use h5')
 # parser.add_argument("--folder_name", type=str, help='folder_name_to_save in')
 parser.add_argument("--eval-name", type=str, help='eval name')
 parser.add_argument('--stride', type=float, help='importance of debiasing')
-parser.add_argument('--eval_dataset', type=str, help='Name of eval dataset [ppb/h5_imagenet/h5]')
-parser.add_argument('--save_sub_images', type=bool, help='Save images')
-parser.add_argument('--model_name', type=str, help='name of the model to evaluate')
-parser.add_argument('--hist_size', type=bool, help='Number of histogram')
+parser.add_argument('--eval-dataset', type=str, help='Name of eval dataset [ppb/h5_imagenet/h5]')
+parser.add_argument('--save-sub-images', type=bool, help='Save images')
+parser.add_argument('--model-name', type=str, help='name of the model to evaluate')
+parser.add_argument('--hist-size', type=bool, help='Number of histogram')
 parser.add_argument('--run-mode', type=str, help='Type of main.py run')
+parser.add_argument('--perturbation-range', type=int, nargs='+', help='list of 7 values to perturb by', default=[])
+parser.add_argument('--var-to-perturb', type=int, help='latent variable to perturb', default=0)
 parser.add_argument('-f', type=str, help='Path to kernel json')
 
 
@@ -69,13 +72,6 @@ def create_folder_name(foldername):
             count += 1
             suffix = f'_{count}'
 
-# def create_run_folder(folder_name):
-#     if len(folder_name) > 0:
-#         return create_folder_name(folder_name)
-#
-#     return create_folder_name(str(datetime.datetime.now().strftime("%d_%m_%Y---%H_%M_%S")))
-
-
 @dataclass
 class Config:
     # Running main for train, eval or both
@@ -85,21 +81,14 @@ class Config:
     # Path to CelebA images
     path_to_fp17k_images: str = '../data/images/fitzpatrick17k_128/'
     # Path to ISIC 202 images
-    path_to_isic20_images: str = './data/images/isic_20_train_256'
-
+    path_to_isic20_images: str = './data/images/isic_20_train_128'
     # Path to evaluation images (Faces)
-    path_to_eval_face_images: str = '/data/images/fitzpatrick17k_256'
-    # # Path to evaluation metadata
-    # path_to_eval_metadata: str = 'data/ppb/PPB-2017/PPB-2017-metadata.csv'
-    # # Path to evaluation images (Nonfaces such as Imagenet)
-    # path_to_eval_nonface_images: str = 'data/imagenet'
+    path_to_eval_face_images: str = '/data/images/fitzpatrick17k_128'
 
     load_model: bool = ARGS.load_model
 
     # # Path to stored model
     path_to_model: Optional[str] = ARGS.path_to_model
-    # Path to h5
-    path_to_h5_train: str = 'data/h5_train/train_face.h5'
     # Type of debiasing used
     debias_type: str = ARGS.debias_type or 'none'
     # name of the model to evaluate
@@ -130,13 +119,13 @@ class Config:
     # Number workers
     num_workers: int = 16 if ARGS.num_workers is None else ARGS.num_workers
     # Image size
-    image_size: int = 256
+    image_size: int = 128
     # Number windows evaluation
     sub_images_nr_windows: int = 15
     # Evaluation window minimum
     eval_min_size: int = 30
     # Evaluation window maximum
-    eval_max_size: int = 256
+    eval_max_size: int = 128
     # Uses h5 instead of the imagenet files
     use_h5: bool = True if ARGS.use_h5 is None else ARGS.use_h5
     # Debug mode prints several statistics
@@ -155,11 +144,13 @@ class Config:
     sub_images_max_size: int = 256
     # Stride of sub images
     sub_images_stride: float = 0.2
+    perturbation_range = ARGS.perturbation_range
+    var_to_perturb = ARGS.var_to_perturb
 
     def __post_init__(self, printing=False):
         # self.run_folder = create_run_folder(self.run_folder)
         if printing:
-            logger.save(f"Saving new run files to test_no_{ARGS.test_no}")
+            logger.save(f"Saving new run files to {ARGS.test_no}")
 
 
 def init_trainining_results(config: Config):
@@ -168,11 +159,13 @@ def init_trainining_results(config: Config):
         os.makedirs("results")
 
     config.__post_init__(printing=True)
-    os.makedirs(f'results/test_no_{config.test_no}/best_and_worst', exist_ok=True)
-    os.makedirs(f'results/test_no_{config.test_no}/bias_probs', exist_ok=True)
-    os.makedirs(f'results/test_no_{config.test_no}/reconstructions', exist_ok=True)
+    os.makedirs(f'results/plots/{config.test_no}/best_and_worst', exist_ok=True)
+    os.makedirs(f'results/plots/{config.test_no}/bias_probs', exist_ok=True)
+    os.makedirs(f'results/plots/{config.test_no}/reconstructions/perturbations', exist_ok=True)
+    os.makedirs(f'results/logs/{config.test_no}', exist_ok=True)
+    os.makedirs(f'results/weights/{config.test_no}', exist_ok=True)
 
-    with open(f"results/test_no_{config.test_no}/flags.txt", "w") as write_file:
+    with open(f"results/logs/{config.test_no}/flags.txt", "w") as write_file:
       write_file.write(f"z_dim = {config.z_dim}\n")
       write_file.write(f"alpha = {config.alpha}\n")
       write_file.write(f"epochs = {config.epochs}\n")
@@ -185,10 +178,10 @@ def init_trainining_results(config: Config):
     if config.debug_mode:
         os.makedirs(f"results/{config.test_no}/debug")
 
-    with open(f"results/test_no_{config.test_no}/training_results.csv", "a+") as write_file:
+    with open(f"results/logs/{config.test_no}/training_results.csv", "a+") as write_file:
         write_file.write("epoch,train_loss,valid_loss,train_acc,valid_acc\n")
 
-    with open(f"results/test_no_{config.test_no}/flags.txt", "w") as wf:
+    with open(f"results/logs/{config.test_no}/flags.txt", "w") as wf:
         wf.write(f"debias_type: {config.debias_type}\n")
         wf.write(f"alpha: {config.alpha}\n")
         wf.write(f"z_dim: {config.z_dim}\n")

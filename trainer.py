@@ -36,8 +36,6 @@ class Trainer:
         eval_freq: int = 36,
         optimizer = torch.optim.Adam,
         load_model: bool = False,
-        custom_encoding_layers: Optional[nn.Sequential] = None,
-        custom_decoding_layers: Optional[nn.Sequential] = None,
         path_to_model: Optional[str] = None,
         config: Optional = None,
         **kwargs
@@ -63,7 +61,8 @@ class Trainer:
             hist_size=hist_size,
             alpha=alpha,
             num_bins=num_bins,
-            device=self.device
+            device=self.device,
+            config=self.config
         ).to(device=self.device)
 
         self.model = self.init_model()
@@ -82,10 +81,6 @@ class Trainer:
         self.train_len = len(df_train)
         self.df_valid = df_val
 
-        # transforms = get_transforms()
-        #
-        # self.transforms = transforms
-
         dataset_train = GenericImageDataset(csv=self.df_train)
         train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=ARGS.batch_size,
                                                    sampler=RandomSampler(dataset_train),
@@ -96,15 +91,8 @@ class Trainer:
                                                    sampler=RandomSampler(dataset_valid),
                                                    num_workers=ARGS.num_workers, drop_last=True)
 
-        # train_loaders, valid_loaders = make_train_and_valid_loaders(
-        #     batch_size=batch_size,
-        #     max_images=max_images,
-        #     **kwargs
-        # )
-        #
         self.train_loader = train_loader
         self.valid_loader = valid_loader
-        # self.valid_loaders = valid_loaders
 
     def init_model(self):
         # If model is loaded from file-system
@@ -117,7 +105,7 @@ class Trainer:
                 )
                 raise Exception
 
-            if not os.path.exists(f"results/{self.path_to_model}"):
+            if not os.path.exists(f"results/weights/{self.path_to_model}"):
                 logger.error(
                     f"Can't find model at results/{self.path_to_model}.",
                     next_step="Model will not be initialized.",
@@ -126,7 +114,7 @@ class Trainer:
                 raise Exception
 
             logger.info(f"Initializing model from {self.path_to_model}")
-            return Db_vae.init(self.path_to_model, self.device, self.z_dim).to(self.device)
+            return Db_vae.init(config=self.config, path_to_model=self.path_to_model, device=self.device, z_dim=self.z_dim).to(self.device)
 
         # Model is newly initialized
         logger.info(f"Creating new model with the following parameters:\n"
@@ -137,6 +125,7 @@ class Trainer:
         )
 
         return Db_vae(
+            config=self.config,
             z_dim=self.z_dim,
             hist_size=self.hist_size,
             alpha=self.alpha,
@@ -174,7 +163,7 @@ class Trainer:
             self.print_reconstruction(self.model, self.valid_loader.dataset, epoch, self.device)
 
             # Save model and scores
-            if epoch == ARGS.epochs:
+            if epoch+1 == ARGS.epochs:
                 self._save_epoch(epoch, train_loss, val_loss, train_acc, val_acc)
 
         logger.success(f"Finished training on {epochs} epochs.")
@@ -189,29 +178,28 @@ class Trainer:
 
             images = sample_dataset(data, 1).to(device)
 
-            recon_images = model.recon_images(images)
+            recon_images = model.recon_images_perturb(images)
 
-            # images = images.unsqueeze_(0)
-            # recon_images = recon_images.unsqueeze_(0)
-            # images = utils.inv_normalize(images[0])
-            # recon_images = utils.inv_normalize(recon_images[0])
+            num_perturbs = len(self.config.perturbation_range)
 
-            fig=plt.figure(figsize=(16, 8))
+            fig=plt.figure(figsize=(16, num_perturbs+1))
 
-            fig.add_subplot(1, 2, 1)
+            fig.add_subplot(1, num_perturbs+1, 1)
             grid = make_grid(images.reshape(1,3,128,128), 1)
             plt.imshow(grid.permute(1,2,0).cpu())
 
             utils.remove_frame(plt)
 
-            fig.add_subplot(1, 2, 2)
-            grid = make_grid(recon_images.reshape(1,3,128,128), n_rows)
-            plt.imshow(grid.permute(1,2,0).cpu())
+
+            for i in range (2,2+num_perturbs):
+                fig.add_subplot(1, num_perturbs+1, i)
+                grid = make_grid(recon_images[i-2].reshape(1,3,128,128), n_rows)
+                plt.imshow(grid.permute(1,2,0).cpu())
 
             utils.remove_frame(plt)
 
-            fig.savefig(f'results/test_no_{self.config.test_no}/reconstructions/permute.png', bbox_inches='tight',
-                        dpi=300)
+            fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/perturbations/perturb_var_{self.config.var_to_perturb}'
+                        f'.png', bbox_inches='tight',dpi=300)
             plt.close()
 
         else:
@@ -234,7 +222,7 @@ class Trainer:
             utils.remove_frame(plt)
 
             if save:
-                fig.savefig(f'results/test_no_{self.config.test_no}/reconstructions/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
+                fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
 
                 plt.close()
             else:
@@ -255,15 +243,15 @@ class Trainer:
             return
 
         # Write epoch metrics
-        path_to_results = f"results/test_no_{self.config.test_no}/training_results.csv"
+        path_to_results = f"results/logs/{self.config.test_no}/training_results.csv"
         with open(path_to_results, "a") as wf:
             wf.write(f"{epoch+1}, {train_loss}, {val_loss}, {train_acc}, {val_acc}\n")
 
         # Write model to disk
-        path_to_model = f"results/test_no_{self.test_no}/model.pt"
+        path_to_model = f"results/weights/{self.config.test_no}/model.pt"
         torch.save(self.model.state_dict(), path_to_model)
 
-        logger.save(f"Stored model and results at results/test_no_{self.test_no}")
+        logger.save(f"Stored model and results at results/{self.config.test_no}")
 
     def visualize_bias(self, probs, data_loader, all_labels, all_index, epoch, n_rows=3):
         # TODO: Add annotation
@@ -271,10 +259,6 @@ class Trainer:
 
         highest_probs_idx = probs.argsort(descending=True)[:n_samples]
         lowest_probs_idx = probs.argsort()[:n_samples]
-
-        # print(probs)
-        # print(probs[highest_probs_idx])
-        # print(probs[lowest_probs_idx])
 
         mean_probs = [np.mean(probs[highest_probs_idx].detach().cpu().numpy()),
                       np.mean(probs[lowest_probs_idx].detach().cpu().numpy())]
@@ -305,7 +289,7 @@ class Trainer:
 
             utils.remove_frame(plt)
 
-        path_to_results = f"results/test_no_{self.config.test_no}/bias_probs/epoch_{epoch+1}.png"
+        path_to_results = f"results/plots/{self.config.test_no}/bias_probs/epoch_{epoch+1}.png"
         logger.save(f"Saving a bias probability figure in {path_to_results}")
 
         fig.savefig(path_to_results, bbox_inches='tight', dpi=300)
@@ -318,7 +302,6 @@ class Trainer:
         self.model.eval()
         avg_loss = 0
         avg_acc = 0
-        avg_auc = 0
 
         all_labels = torch.tensor([], dtype=torch.long).to(self.device)
         all_preds = torch.tensor([]).to(self.device)
@@ -340,7 +323,6 @@ class Trainer:
 
                 avg_loss += loss.item()
                 avg_acc += acc
-                # avg_auc += a_u_c
 
                 all_labels = torch.cat((all_labels, labels))
                 all_preds = torch.cat((all_preds, pred))
@@ -355,8 +337,6 @@ class Trainer:
 
     def _train_epoch(self):
         """Trains the model for one epoch."""
-        # train_loader = self.train_loader
-
         self.model.train()
 
         # The batches contain Image(rgb x w x h), Labels (1 for 0), original dataset indices
@@ -365,7 +345,6 @@ class Trainer:
 
         avg_loss: float = 0
         avg_acc: float = 0
-        avg_auc = 0
         count: int = 0
 
         train_loss = []
@@ -387,7 +366,6 @@ class Trainer:
             acc = utils.calculate_accuracy(labels, pred)
             avg_loss += loss.item()
             avg_acc += acc
-            # avg_auc += a_u_c
 
             if i == self.train_len/ARGS.batch_size: # 48: #% self.eval_freq == 0:
                 logger.info(f"Training: batch:{i} accuracy:{acc}") # , AUC:{a_u_c}")
@@ -409,11 +387,11 @@ class Trainer:
         dataset_train = GenericImageDataset(csv=self.df_train)
         hist_loader = make_hist_loader(dataset_train, self.batch_size)
 
-        # if self.debias_type != 'none':
-        hist = self._update_histogram(hist_loader, epoch)
-        self.train_loader.sampler.weights = hist
-        # else:
-        #     self.train_loaders.faces.sampler.weights = torch.ones(len(self.train_loaders.faces.sampler.weights))
+        if self.debias_type != 'none':
+            hist = self._update_histogram(hist_loader, epoch)
+            self.train_loader.sampler.weights = hist
+        else:
+            self.train_loader.sampler.weights = torch.ones(self.hist_size)
 
 
     def _update_histogram(self, data_loader, epoch):
@@ -497,7 +475,7 @@ class Trainer:
             utils.remove_frame(plt)
 
         if save:
-            fig.savefig(f'results/test_no_{self.config.test_no}/best_and_worst/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
+            fig.savefig(f'results/plots/{self.config.test_no}/best_and_worst/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
 
             plt.close()
 
