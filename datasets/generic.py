@@ -56,14 +56,14 @@ class GenericImageDataset(Dataset):
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
         if self.transform is not None:
-            res = self.transform(image=image)
-            image = res['image'].astype(np.float32)
+            res = self.transform(image)
+            image = res.numpy().astype(np.float32)
         else:
             image = image.astype(np.float32)
 
         image = image.transpose(2, 0, 1)
 
-        data = torch.tensor(image).float()
+        data = torch.tensor(image).permute(1,2,0).float()
 
         sub_images: torch.Tensor = torch.tensor(0)
 

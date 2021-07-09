@@ -16,6 +16,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 parser = argparse.ArgumentParser()
 parser.add_argument('--DEBUG', action='store_true')
 parser.add_argument('--DP', action='store_true')
+parser.add_argument('--load-model', action='store_true')
 parser.add_argument('--image-dir', type=str, default='./data/images/')
 parser.add_argument('--csv-dir', type=str, default='./data/csv')
 parser.add_argument('--run-folder', type=str, default='outputs')
@@ -23,7 +24,7 @@ parser.add_argument('--test-no', type=int, default=0)
 parser.add_argument('--batch_size', type=int, help='size of batch', default=64)
 parser.add_argument('--num_workers', type=int, help='number of workers', default=16)
 parser.add_argument('--epochs', type=int, help='max number of epochs')
-parser.add_argument('--save-epoch', type=int, help='epoch to save on', default=100)
+# parser.add_argument('--save-epoch', type=int, help='epoch to save on', default=100)
 parser.add_argument('--z_dim', type=int, help='dimensionality of latent space')
 parser.add_argument('--alpha', type=float, help='importance of debiasing')
 parser.add_argument('--num_bins', type=int, help='importance of debiasing')
@@ -33,14 +34,14 @@ parser.add_argument('--debias_type', type=str, help='type of debiasing used', de
 parser.add_argument("--path_to_model", type=str, help='Path to stored model')
 parser.add_argument("--debug_mode", type=bool, help='Debug mode')
 parser.add_argument("--use_h5", type=bool, help='Use h5')
-parser.add_argument("--folder_name", type=str, help='folder_name_to_save in')
+# parser.add_argument("--folder_name", type=str, help='folder_name_to_save in')
 parser.add_argument("--eval-name", type=str, help='eval name')
 parser.add_argument('--stride', type=float, help='importance of debiasing')
 parser.add_argument('--eval_dataset', type=str, help='Name of eval dataset [ppb/h5_imagenet/h5]')
 parser.add_argument('--save_sub_images', type=bool, help='Save images')
 parser.add_argument('--model_name', type=str, help='name of the model to evaluate')
 parser.add_argument('--hist_size', type=bool, help='Number of histogram')
-parser.add_argument('--run_mode', type=str, help='Type of main.py run')
+parser.add_argument('--run-mode', type=str, help='Type of main.py run')
 parser.add_argument('-f', type=str, help='Path to kernel json')
 
 
@@ -68,18 +69,19 @@ def create_folder_name(foldername):
             count += 1
             suffix = f'_{count}'
 
-def create_run_folder(folder_name):
-    if len(folder_name) > 0:
-        return create_folder_name(folder_name)
+# def create_run_folder(folder_name):
+#     if len(folder_name) > 0:
+#         return create_folder_name(folder_name)
+#
+#     return create_folder_name(str(datetime.datetime.now().strftime("%d_%m_%Y---%H_%M_%S")))
 
-    return create_folder_name(str(datetime.datetime.now().strftime("%d_%m_%Y---%H_%M_%S")))
 
 @dataclass
 class Config:
     # Running main for train, eval or both
     run_mode: str = 'both' if ARGS.run_mode is None else ARGS.run_mode
-    # Folder name of the run
-    run_folder: str = '' if ARGS.folder_name is None else ARGS.folder_name
+    # # Folder name of the run
+    # run_folder: str = '' if ARGS.test_no is None else str(ARGS.test_no)
     # Path to CelebA images
     path_to_fp17k_images: str = '../data/images/fitzpatrick17k_128/'
     # Path to ISIC 202 images
@@ -91,6 +93,8 @@ class Config:
     # path_to_eval_metadata: str = 'data/ppb/PPB-2017/PPB-2017-metadata.csv'
     # # Path to evaluation images (Nonfaces such as Imagenet)
     # path_to_eval_nonface_images: str = 'data/imagenet'
+
+    load_model: bool = ARGS.load_model
 
     # # Path to stored model
     path_to_model: Optional[str] = ARGS.path_to_model
@@ -104,6 +108,7 @@ class Config:
     random_seed: int = 0
     # Device to use
     device: torch.device = DEVICE
+    test_no = ARGS.test_no
     # eval file name
     eval_name: str = ARGS.eval_name or "evaluation_results.txt"
     # Batch size
@@ -152,9 +157,9 @@ class Config:
     sub_images_stride: float = 0.2
 
     def __post_init__(self, printing=False):
-        self.run_folder = create_run_folder(self.run_folder)
+        # self.run_folder = create_run_folder(self.run_folder)
         if printing:
-            logger.save(f"Saving new run files to {self.run_folder}")
+            logger.save(f"Saving new run files to test_no_{ARGS.test_no}")
 
 
 def init_trainining_results(config: Config):
@@ -163,11 +168,11 @@ def init_trainining_results(config: Config):
         os.makedirs("results")
 
     config.__post_init__(printing=True)
-    os.makedirs("results/"+ config.run_folder + '/best_and_worst')
-    os.makedirs("results/"+ config.run_folder + '/bias_probs')
-    os.makedirs("results/"+ config.run_folder + '/reconstructions')
+    os.makedirs(f'results/test_no_{config.test_no}/best_and_worst', exist_ok=True)
+    os.makedirs(f'results/test_no_{config.test_no}/bias_probs', exist_ok=True)
+    os.makedirs(f'results/test_no_{config.test_no}/reconstructions', exist_ok=True)
 
-    with open(f"results/{config.run_folder}/flags.txt", "w") as write_file:
+    with open(f"results/test_no_{config.test_no}/flags.txt", "w") as write_file:
       write_file.write(f"z_dim = {config.z_dim}\n")
       write_file.write(f"alpha = {config.alpha}\n")
       write_file.write(f"epochs = {config.epochs}\n")
@@ -178,12 +183,12 @@ def init_trainining_results(config: Config):
 
 
     if config.debug_mode:
-        os.makedirs(f"results/{config.run_folder}/debug")
+        os.makedirs(f"results/{config.test_no}/debug")
 
-    with open(f"results/{config.run_folder}/training_results.csv", "a+") as write_file:
+    with open(f"results/test_no_{config.test_no}/training_results.csv", "a+") as write_file:
         write_file.write("epoch,train_loss,valid_loss,train_acc,valid_acc\n")
 
-    with open(f"results/{config.run_folder}/flags.txt", "w") as wf:
+    with open(f"results/test_no_{config.test_no}/flags.txt", "w") as wf:
         wf.write(f"debias_type: {config.debias_type}\n")
         wf.write(f"alpha: {config.alpha}\n")
         wf.write(f"z_dim: {config.z_dim}\n")

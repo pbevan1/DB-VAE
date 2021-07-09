@@ -46,9 +46,10 @@ class DatasetOutput(NamedTuple):
     sub_images: Optional[torch.Tensor] = None
 
 # Default transform
-default_transform = A.Compose([
-    A.Resize(128, 128),
-    A.Normalize()
+default_transform = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Resize((128, 128)),
+    transforms.ToTensor()
 ])
 
 

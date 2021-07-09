@@ -138,13 +138,13 @@ def get_df():
 
     return df_train, df_val, df_test, mel_idx
 
-def get_transforms():
-    #augmentations for all training data
-    transforms = A.Compose([
-        A.Resize(128, 128),
-        A.Normalize()#mean, std)
-    ])
-    return transforms
+# def get_transforms():
+#     #augmentations for all training data
+#     transforms = A.Compose([
+#         A.Resize(128, 128),
+#         A.Normalize()#mean, std)
+#     ])
+#     return transforms
 
 def split_dataset(dataset, train_size: float, random_seed, max_images: Optional[int] = None):
     """Splits a dataset into a certain (maximum) size."""

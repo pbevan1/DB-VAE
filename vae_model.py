@@ -64,6 +64,7 @@ class Encoder(nn.Module):
         Perform forward pass of encoder.
         """
         # print(f'input shape: {input.shape}')
+        # print(input.shape)
         out = self.layers(input)
         # print(f'out shape: {out.shape}')
 
@@ -126,6 +127,8 @@ class Decoder(nn.Module):
         """
         Perform forward pass of encoder.
         """
+
+        # print(input[5])
 
         # print(f'out shape: {input.shape}')
         out = self.layers(input)

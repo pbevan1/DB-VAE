@@ -36,7 +36,6 @@ class Trainer:
         eval_freq: int = 36,
         optimizer = torch.optim.Adam,
         load_model: bool = False,
-        run_folder: Optional[str] = None,
         custom_encoding_layers: Optional[nn.Sequential] = None,
         custom_decoding_layers: Optional[nn.Sequential] = None,
         path_to_model: Optional[str] = None,
@@ -56,7 +55,6 @@ class Trainer:
         self.debias_type = debias_type
         self.device = device
         self.eval_freq = eval_freq
-        self.run_folder = run_folder
 
         self.config = config
 
@@ -176,7 +174,7 @@ class Trainer:
             self.print_reconstruction(self.model, self.valid_loader.dataset, epoch, self.device)
 
             # Save model and scores
-            if epoch == ARGS.save_epoch:
+            if epoch == ARGS.epochs:
                 self._save_epoch(epoch, train_loss, val_loss, train_acc, val_acc)
 
         logger.success(f"Finished training on {epochs} epochs.")
@@ -187,35 +185,68 @@ class Trainer:
         model.eval()
         n_samples = n_rows**2
 
-        images = sample_dataset(data, n_samples).to(device)
+        if self.config.run_mode=='perturb':
 
-        recon_images = model.recon_images(images)
+            images = sample_dataset(data, 1).to(device)
 
-        fig=plt.figure(figsize=(16, 8))
+            recon_images = model.recon_images(images)
 
-        fig.add_subplot(1, 2, 1)
-        grid = make_grid(images.reshape(n_samples,3,128,128), n_rows)
-        plt.imshow(grid.permute(1,2,0).cpu())
+            # images = images.unsqueeze_(0)
+            # recon_images = recon_images.unsqueeze_(0)
+            # images = utils.inv_normalize(images[0])
+            # recon_images = utils.inv_normalize(recon_images[0])
 
-        utils.remove_frame(plt)
+            fig=plt.figure(figsize=(16, 8))
 
-        fig.add_subplot(1, 2, 2)
-        grid = make_grid(recon_images.reshape(n_samples,3,128,128), n_rows)
-        plt.imshow(grid.permute(1,2,0).cpu())
+            fig.add_subplot(1, 2, 1)
+            grid = make_grid(images.reshape(1,3,128,128), 1)
+            plt.imshow(grid.permute(1,2,0).cpu())
 
-        utils.remove_frame(plt)
+            utils.remove_frame(plt)
 
-        if save:
-            fig.savefig(f'results/{self.config.run_folder}/reconstructions/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
+            fig.add_subplot(1, 2, 2)
+            grid = make_grid(recon_images.reshape(1,3,128,128), n_rows)
+            plt.imshow(grid.permute(1,2,0).cpu())
 
+            utils.remove_frame(plt)
+
+            fig.savefig(f'results/test_no_{self.config.test_no}/reconstructions/permute.png', bbox_inches='tight',
+                        dpi=300)
             plt.close()
+
         else:
-            return fig
+            images = sample_dataset(data, n_samples).to(device)
+
+            recon_images = model.recon_images(images)
+
+            fig=plt.figure(figsize=(16, 8))
+
+            fig.add_subplot(1, 2, 1)
+            grid = make_grid(images.reshape(n_samples,3,128,128), n_rows)
+            plt.imshow(grid.permute(1,2,0).cpu())
+
+            utils.remove_frame(plt)
+
+            fig.add_subplot(1, 2, 2)
+            grid = make_grid(recon_images.reshape(n_samples,3,128,128), n_rows)
+            plt.imshow(grid.permute(1,2,0).cpu())
+
+            utils.remove_frame(plt)
+
+            if save:
+                fig.savefig(f'results/test_no_{self.config.test_no}/reconstructions/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
+
+                plt.close()
+            else:
+                return fig
+
+    def perturb(self):
+        self.print_reconstruction(self.model, self.valid_loader.dataset, 0, self.device)
 
 
     def _save_epoch(self, epoch: int, train_loss: float, val_loss: float, train_acc: float, val_acc: float):
         """Writes training and validation scores to a csv, and stores a model to disk."""
-        if not self.run_folder:
+        if not self.config.test_no:
             logger.warning(f"`--run_folder` could not be found.",
                            f"The program will continue, but won't save anything",
                            f"Double-check if --run_folder is configured."
@@ -224,15 +255,15 @@ class Trainer:
             return
 
         # Write epoch metrics
-        path_to_results = f"results/{self.run_folder}/training_results.csv"
+        path_to_results = f"results/test_no_{self.config.test_no}/training_results.csv"
         with open(path_to_results, "a") as wf:
             wf.write(f"{epoch+1}, {train_loss}, {val_loss}, {train_acc}, {val_acc}\n")
 
         # Write model to disk
-        path_to_model = f"results/{self.run_folder}/model.pt"
+        path_to_model = f"results/test_no_{self.test_no}/model.pt"
         torch.save(self.model.state_dict(), path_to_model)
 
-        logger.save(f"Stored model and results at results/{self.run_folder}")
+        logger.save(f"Stored model and results at results/test_no_{self.test_no}")
 
     def visualize_bias(self, probs, data_loader, all_labels, all_index, epoch, n_rows=3):
         # TODO: Add annotation
@@ -274,7 +305,7 @@ class Trainer:
 
             utils.remove_frame(plt)
 
-        path_to_results = f"results/{self.config.run_folder}/bias_probs/epoch_{epoch+1}.png"
+        path_to_results = f"results/test_no_{self.config.test_no}/bias_probs/epoch_{epoch+1}.png"
         logger.save(f"Saving a bias probability figure in {path_to_results}")
 
         fig.savefig(path_to_results, bbox_inches='tight', dpi=300)
@@ -439,7 +470,7 @@ class Trainer:
         return
 
     def reconstruction_samples(self, n_rows=4):
-        valid_data = concat_datasets(self.valid_loaders.faces.dataset, self.valid_loaders.nonfaces.dataset, proportion_a=0.5)
+        valid_data = concat_datasets(self.valid_loader.faces.dataset, self.valid_loader.nonfaces.dataset, proportion_a=0.5)
         fig = self.print_reconstruction(self.model, valid_data, 0, self.device, save=False)
 
         fig.show()
@@ -466,7 +497,7 @@ class Trainer:
             utils.remove_frame(plt)
 
         if save:
-            fig.savefig(f'results/{self.config.run_folder}/best_and_worst/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
+            fig.savefig(f'results/test_no_{self.config.test_no}/best_and_worst/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
 
             plt.close()
 
@@ -477,7 +508,7 @@ class Trainer:
 
     def best_and_worst(self, n_rows=4):
         """Calculates the validation error of the model."""
-        face_loader, nonface_loader = self.valid_loaders
+        # face_loader, nonface_loader = self.valid_loader
 
         self.model.eval()
         avg_loss = 0
@@ -490,13 +521,14 @@ class Trainer:
         count = 0
 
         with torch.no_grad():
-            for i, (face_batch, nonface_batch) in enumerate(zip(face_loader, nonface_loader)):
-                images, labels, idxs = utils.concat_batches(face_batch, nonface_batch)
+            for i, batch in enumerate(self.valid_loader):
+                # images, labels, idxs = utils.concat_batches(face_batch, nonface_batch)
+                images, labels, idxs, _ = batch
 
                 images = images.to(self.device)
                 labels = labels.to(self.device)
                 idxs = idxs.to(self.device)
-                pred, loss = self.model.forward(images, labels)
+                pred, loss, _ = self.model.forward(images, labels)
 
                 loss = loss.mean()
                 acc = utils.calculate_accuracy(labels, pred)
@@ -511,7 +543,7 @@ class Trainer:
                 count = i
 
         best_faces, worst_faces, best_other, worst_other = utils.get_best_and_worst_predictions(all_labels, all_preds, self.device)
-        fig = self.visualize_best_and_worst(self.valid_loaders, all_labels, all_idxs, 0, best_faces, worst_faces, best_other, worst_other, save=True)
+        fig = self.visualize_best_and_worst(self.valid_loader, all_labels, all_idxs, 0, best_faces, worst_faces, best_other, worst_other, save=True)
 
         fig.show()
 

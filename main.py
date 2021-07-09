@@ -20,10 +20,9 @@ dname = os.path.dirname(abspath)
 os.chdir(dname)
 
 
-def make_trainer(config: Config, load_model: bool = False):
+def make_trainer(config: Config):
      """Creates an Evaluator object which is ready to .train on. Allows .load_model to load file. """
      return Trainer(
-          load_model=load_model,
           config=config,
           **asdict(config)
      )
@@ -98,6 +97,10 @@ if __name__ == "__main__":
           logger.info("Running evaluation only")
           evaluator = make_evaluator(config)
           evaluator.eval_on_setups('run_mode')
+     if config.run_mode == 'perturb':
+          logger.info("Running reconstruction only")
+          trainer = make_trainer(config)
+          trainer.perturb()
      else:
           logger.info("Running training and evaluation of this model")
 
