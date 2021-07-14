@@ -169,43 +169,62 @@ class Trainer:
         logger.success(f"Finished training on {epochs} epochs.")
 
 
-    def print_reconstruction(self, model, data, epoch, device, n_rows=4, save=True):
+    def print_reconstruction(self, model, data, epoch, device, n_rows=4, save=True, var_to_perturb=None):
         # TODO: Add annotation
         model.eval()
         n_samples = n_rows**2
 
         if self.config.run_mode=='perturb':
 
-            images = sample_dataset(data, 1).to(device)
+            # images = sample_dataset(data, 1).to(device)
+            #
+            # recon_images = model.recon_images_perturb(images, var_to_perturb)
+            #
+            # num_perturbs = len(self.config.perturbation_range)
+            #
+            # fig=plt.figure(figsize=(16, num_perturbs+1))
+            #
+            # fig.add_subplot(1, num_perturbs+1, 1)
+            # grid = make_grid(images.reshape(1,3,128,128), 1)
+            # plt.imshow(grid.permute(1,2,0).cpu())
+            # utils.remove_frame(plt)
+            #
+            #
+            # for i in range (2,2+num_perturbs):
+            #     fig.add_subplot(1, num_perturbs+1, i)
+            #     grid = make_grid(recon_images[i-2].reshape(1,3,128,128), n_rows)
+            #     plt.imshow(grid.permute(1,2,0).cpu())
+            #     utils.remove_frame(plt)
+            #
+            # fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/perturbations/perturb_var_{var_to_perturb}'
+            #             f'.png', bbox_inches='tight',dpi=300)
+            # plt.close()
 
-            recon_images = model.recon_images_perturb(images)
+            steps = 8
 
-            num_perturbs = len(self.config.perturbation_range)
+            images = sample_dataset(data, 2).to(device)
 
-            fig=plt.figure(figsize=(16, num_perturbs+1))
+            recon_images = model.interpolate(images, steps)
 
-            fig.add_subplot(1, num_perturbs+1, 1)
-            grid = make_grid(images.reshape(1,3,128,128), 1)
-            plt.imshow(grid.permute(1,2,0).cpu())
+            print(recon_images.shape)
 
-            utils.remove_frame(plt)
+            fig = plt.figure(figsize=(16, steps))
 
-
-            for i in range (2,2+num_perturbs):
-                fig.add_subplot(1, num_perturbs+1, i)
-                grid = make_grid(recon_images[i-2].reshape(1,3,128,128), n_rows)
+            for i, im in enumerate(recon_images):
+                fig.add_subplot(1, steps+1, i+1)
+                grid = make_grid(recon_images[i].reshape(1,3,128,128), 1)
                 plt.imshow(grid.permute(1,2,0).cpu())
+                utils.remove_frame(plt)
 
-            utils.remove_frame(plt)
-
-            fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/perturbations/perturb_var_{self.config.var_to_perturb}'
+            fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/perturbations/perturb'
                         f'.png', bbox_inches='tight',dpi=300)
-            plt.close()
 
         else:
             images = sample_dataset(data, n_samples).to(device)
 
             recon_images = model.recon_images(images)
+
+            print(recon_images.shape)
 
             fig=plt.figure(figsize=(16, 8))
 
@@ -229,7 +248,8 @@ class Trainer:
                 return fig
 
     def perturb(self):
-        self.print_reconstruction(self.model, self.valid_loader.dataset, 0, self.device)
+        # for i in range(ARGS.var_to_perturb):
+        self.print_reconstruction(self.model, self.valid_loader.dataset, 0, self.device) #, var_to_perturb=i)
 
 
     def _save_epoch(self, epoch: int, train_loss: float, val_loss: float, train_acc: float, val_acc: float):

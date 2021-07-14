@@ -43,7 +43,7 @@ parser.add_argument('--save-sub-images', type=bool, help='Save images')
 parser.add_argument('--model-name', type=str, help='name of the model to evaluate')
 parser.add_argument('--hist-size', type=bool, help='Number of histogram')
 parser.add_argument('--run-mode', type=str, help='Type of main.py run')
-parser.add_argument('--perturbation-range', type=int, nargs='+', help='list of 7 values to perturb by', default=[])
+parser.add_argument('--perturbation-range', type=float, nargs='+', help='list of 7 values to perturb by', default=[])
 parser.add_argument('--var-to-perturb', type=int, help='latent variable to perturb', default=0)
 parser.add_argument('-f', type=str, help='Path to kernel json')
 

@@ -213,9 +213,9 @@ class Db_vae(nn.Module):
         loss_class = F.binary_cross_entropy_with_logits(pred, labels.float(), reduction='none')
 
         # We only want to calculate the loss towards actual faces
-        faceslicer = labels == 1
-        facemean = mean[faceslicer]
-        facestd = std[faceslicer]
+        # faceslicer = labels == 1
+        facemean = mean #[faceslicer]
+        facestd = std #[faceslicer]
 
         # Get single samples from the distributions with reparametrisation trick
         dist = torch.distributions.normal.Normal(facemean, facestd)
@@ -228,7 +228,7 @@ class Db_vae(nn.Module):
 
 
         # calculate VAE losses
-        loss_recon = (images[faceslicer] - res)**2
+        loss_recon = (images - res)**2
         loss_recon = loss_recon.view(loss_recon.shape[0],-1).mean(1)
 
         loss_kl = torch.distributions.kl.kl_divergence(dist, self.target_dist)
@@ -237,11 +237,11 @@ class Db_vae(nn.Module):
         loss_vae = self.c2 * loss_recon + self.c3 * loss_kl
         loss_total = self.c1 * loss_class
 
-        # Only add loss to positions of faces, rest is zero
-        zeros = torch.zeros(faceslicer.shape[0]).to(self.device)
-        zeros[faceslicer] = loss_vae
+        # # Only add loss to positions of faces, rest is zero
+        # zeros = torch.zeros(faceslicer.shape[0]).to(self.device)
+        # zeros[faceslicer] = loss_vae
 
-        loss_total = loss_total + zeros
+        loss_total = loss_total + loss_vae #+ zeros
 
         return pred, loss_total, sigout
 
@@ -258,7 +258,11 @@ class Db_vae(nn.Module):
 
     def interpolate(self, images: torch.Tensor, amount: int):
         with torch.no_grad():
+
             _, mean, std, _ = self.encoder(images)
+
+            print(mean.shape)
+            print(std.shape)
 
             mean_1, std_1 = mean[0,:], std[0,:]
             mean_2, std_2 = mean[1,:], std[1,:]
@@ -266,22 +270,53 @@ class Db_vae(nn.Module):
             all_mean  = torch.tensor([]).to(self.device)
             all_std = torch.tensor([]).to(self.device)
 
+            # print(mean_1)
+            # print(mean_2)
+
             diff_mean = mean_1 - mean_2
-            diff_std = std_1 = std_2
+            diff_std = std_1 - std_2
 
             steps_mean = diff_mean / (amount-1)
             steps_std = diff_std / (amount-1)
 
+            # print(steps_mean)
+            # print(steps_std)
+
             for i in range(amount):
                 all_mean = torch.cat((all_mean, mean_1 - steps_mean*i))
                 all_std = torch.cat((all_std, std_1 - steps_std*i))
+                print(all_mean.shape)
+                print(all_std.shape)
 
             all_mean = all_mean.view(amount, -1)
             all_std = all_std.view(amount, -1)
+
+            print(all_mean.shape)
+            print(all_std.shape)
+
+            print(all_mean)
+            # print(all_std.shape)
+
             dist = torch.distributions.normal.Normal(all_mean, all_std)
             z = dist.rsample().to(self.device)
 
             recon_images = self.decoder(z)
+
+
+        # with torch.no_grad():
+        #     pred, mean, std, _ = self.encoder(images)
+        #
+        #     print(mean.shape)
+        #     print(std.shape)
+        #
+        #     # Get single samples from the distributions with reparametrisation trick
+        #     dist = torch.distributions.normal.Normal(mean, std)
+        #     z = dist.rsample().to(self.device)
+        #
+        #     recon_images = self.decoder(z)
+
+        # return predictions and the loss
+        return recon_images
 
         return recon_images
 
@@ -392,6 +427,9 @@ class Db_vae(nn.Module):
         with torch.no_grad():
             pred, mean, std, _ = self.encoder(images)
 
+            print(mean.shape)
+            print(std.shape)
+
             # Get single samples from the distributions with reparametrisation trick
             dist = torch.distributions.normal.Normal(mean, std)
             z = dist.rsample().to(self.device)
@@ -401,19 +439,22 @@ class Db_vae(nn.Module):
         # return predictions and the loss
         return recon_images
 
-    def recon_images_perturb(self, images: torch.Tensor):
+    def recon_images_perturb(self, images: torch.Tensor, var_to_perturb):
         with torch.no_grad():
             pred, mean, std, _ = self.encoder(images)
 
             perturbation_range = self.config.perturbation_range
-            var_to_perturb = self.config.var_to_perturb
+            var_to_perturb = var_to_perturb #self.config.var_to_perturb
             recon_images = []
             for p in perturbation_range:
+                mean[:,var_to_perturb] = mean[:,var_to_perturb] * p
+                std[:, var_to_perturb] = std[:, var_to_perturb] * p
                 # Get single samples from the distributions with reparametrisation trick
+
                 dist = torch.distributions.normal.Normal(mean, std)
                 z = dist.rsample().squeeze().to(self.device)
                 # print(z[55])
-                z[var_to_perturb] = z[var_to_perturb] + p #multiplying specified latent variable by value in specified range
+                # z[var_to_perturb] = z[var_to_perturb] + p #adding perturbation value to specified latent variable
                 recon_image = self.decoder(z.unsqueeze(0))
                 recon_images.append(recon_image)
 
