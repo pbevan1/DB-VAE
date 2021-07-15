@@ -22,6 +22,7 @@ parser.add_argument('--image-dir', type=str, default='./data/images/')
 parser.add_argument('--csv-dir', type=str, default='./data/csv')
 parser.add_argument('--run-folder', type=str, default='outputs')
 parser.add_argument('--test-no', type=int, default=0)
+parser.add_argument('--image-size', type=int, help='size of images', default=256)
 parser.add_argument('--batch-size', type=int, help='size of batch', default=64)
 parser.add_argument('--num-workers', type=int, help='number of workers', default=16)
 parser.add_argument('--epochs', type=int, help='max number of epochs')
@@ -44,6 +45,8 @@ parser.add_argument('--model-name', type=str, help='name of the model to evaluat
 parser.add_argument('--hist-size', type=bool, help='Number of histogram')
 parser.add_argument('--run-mode', type=str, help='Type of main.py run')
 parser.add_argument('--perturbation-range', type=float, nargs='+', help='list of 7 values to perturb by', default=[])
+parser.add_argument('--interp1', type=int, help='first image to interpolate', default=0)
+parser.add_argument('--interp2', type=int, help='second image to interpolate', default=0)
 parser.add_argument('--var-to-perturb', type=int, help='latent variable to perturb', default=0)
 parser.add_argument('-f', type=str, help='Path to kernel json')
 
@@ -78,17 +81,17 @@ class Config:
     run_mode: str = 'both' if ARGS.run_mode is None else ARGS.run_mode
     # # Folder name of the run
     # run_folder: str = '' if ARGS.test_no is None else str(ARGS.test_no)
-    # Path to CelebA images
-    path_to_fp17k_images: str = '../data/images/fitzpatrick17k_128/'
-    # Path to ISIC 202 images
-    path_to_isic20_images: str = './data/images/isic_20_train_128'
-    # Path to evaluation images (Faces)
-    path_to_eval_face_images: str = '/data/images/fitzpatrick17k_128'
+    # # Path to CelebA images
+    # path_to_fp17k_images: str = '../data/images/fitzpatrick17k_128/'
+    # # Path to ISIC 202 images
+    # path_to_isic20_images: str = './data/images/isic_20_train_128'
+    # # Path to evaluation images (Faces)
+    # path_to_eval_face_images: str = '/data/images/fitzpatrick17k_128'
 
     load_model: bool = ARGS.load_model
 
     # # Path to stored model
-    path_to_model: Optional[str] = ARGS.path_to_model
+    path_to_model: Optional[str] = ARGS.path_to_model or ARGS.test_no
     # Type of debiasing used
     debias_type: str = ARGS.debias_type or 'none'
     # name of the model to evaluate
@@ -110,6 +113,9 @@ class Config:
     z_dim: int = ARGS.z_dim or 200
     # Alpha value
     alpha: float = ARGS.alpha or 0.01
+    #image indexes to interpolate between
+    interp1 = ARGS.interp1
+    interp2 = ARGS.interp2
     # stride used for evaluation windows
     stride: float = ARGS.stride or 0.2
     # Dataset size
@@ -119,13 +125,13 @@ class Config:
     # Number workers
     num_workers: int = 16 if ARGS.num_workers is None else ARGS.num_workers
     # Image size
-    image_size: int = 128
+    image_size: int = ARGS.image_size
     # Number windows evaluation
     sub_images_nr_windows: int = 15
     # Evaluation window minimum
     eval_min_size: int = 30
     # Evaluation window maximum
-    eval_max_size: int = 128
+    eval_max_size: int = ARGS.image_size
     # Uses h5 instead of the imagenet files
     use_h5: bool = True if ARGS.use_h5 is None else ARGS.use_h5
     # Debug mode prints several statistics

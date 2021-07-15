@@ -15,8 +15,7 @@ from setup import *
 class Encoder(nn.Module):
     """
     Encodes the data using a CNN
-
-    Input => 256x256 image
+    Input => 64x64 image
     Output => mean vector z_dim
               log_std vector z_dim
               predicted value
@@ -28,7 +27,15 @@ class Encoder(nn.Module):
         self.z_dim = z_dim
 
         self.layers = nn.Sequential(
-            nn.Conv2d(3, 256, kernel_size=5, stride=2),
+            nn.Conv2d(3, 64, kernel_size=5, stride=2),
+            nn.LeakyReLU(),
+            nn.BatchNorm2d(64),
+
+            nn.Conv2d(64, 128, kernel_size=5, stride=2),
+            nn.LeakyReLU(),
+            nn.BatchNorm2d(128),
+
+            nn.Conv2d(128, 256, kernel_size=5, stride=2),
             nn.LeakyReLU(),
             nn.BatchNorm2d(256),
 
@@ -44,13 +51,9 @@ class Encoder(nn.Module):
             nn.LeakyReLU(),
             nn.BatchNorm2d(2048),
 
-            nn.Conv2d(2048, 4096, kernel_size=5, stride=2),
-            nn.LeakyReLU(),
-            nn.BatchNorm2d(4096),
-
             nn.Flatten(),
 
-            nn.Linear(4096, 1000),
+            nn.Linear(2048, 1000),
             nn.LeakyReLU(),
 
             nn.Linear(1000, z_dim*2+1)
@@ -63,10 +66,9 @@ class Encoder(nn.Module):
         """
         Perform forward pass of encoder.
         """
-        # print(f'input shape: {input.shape}')
-        # print(input.shape)
+        # print(f'Encoder input shape: {input.shape}')
         out = self.layers(input)
-        # print(f'out shape: {out.shape}')
+        # print(f'Encoder out shape: {out.shape}')
 
         sigout = self.sigmoid(out)
 
@@ -87,10 +89,8 @@ class UnFlatten(nn.Module):
 class Decoder(nn.Module):
     """
     Encodes the data using a CNN
-
     Input => sample vector z_dim
-    Output => 256x256 image
-
+    Output => 64x64 image
     4 6 13 29 61
     """
 
@@ -100,12 +100,8 @@ class Decoder(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(z_dim, 1000),
             nn.LeakyReLU(),
-            nn.Linear(1000, 4096*1*1),
-            UnFlatten(4096, 1),
-
-            nn.ConvTranspose2d(4096, 2048, kernel_size=5, stride=2),
-            nn.LeakyReLU(),
-            nn.BatchNorm2d(2048),
+            nn.Linear(1000, 2048*1*1),
+            UnFlatten(2048, 1),
 
             nn.ConvTranspose2d(2048, 1024, kernel_size=5, stride=2),
             nn.LeakyReLU(),
@@ -115,11 +111,19 @@ class Decoder(nn.Module):
             nn.LeakyReLU(),
             nn.BatchNorm2d(512),
 
-            nn.ConvTranspose2d(512, 256, kernel_size=5, stride=2, output_padding=1),
+            nn.ConvTranspose2d(512, 256, kernel_size=5, stride=2),
             nn.LeakyReLU(),
             nn.BatchNorm2d(256),
 
-            nn.ConvTranspose2d(256, 3, kernel_size=5, stride=2, output_padding=1),
+            nn.ConvTranspose2d(256, 128, kernel_size=5, stride=2),
+            nn.LeakyReLU(),
+            nn.BatchNorm2d(128),
+
+            nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2, output_padding=1),
+            nn.LeakyReLU(),
+            nn.BatchNorm2d(64),
+
+            nn.ConvTranspose2d(64, 3, kernel_size=5, stride=2, output_padding=1),
             nn.Sigmoid()
         )
 
@@ -128,11 +132,9 @@ class Decoder(nn.Module):
         Perform forward pass of encoder.
         """
 
-        # print(input[5])
-
-        # print(f'out shape: {input.shape}')
+        # print(f'Decoder in shape: {input.shape}')
         out = self.layers(input)
-        # print(f'out shape: {out.shape}')
+        # print(f'Decoder out shape: {out.shape}')
 
         return out
 
@@ -214,11 +216,11 @@ class Db_vae(nn.Module):
 
         # We only want to calculate the loss towards actual faces
         # faceslicer = labels == 1
-        facemean = mean #[faceslicer]
-        facestd = std #[faceslicer]
+        # facemean = mean #[faceslicer]
+        # facestd = std #[faceslicer]
 
         # Get single samples from the distributions with reparametrisation trick
-        dist = torch.distributions.normal.Normal(facemean, facestd)
+        dist = torch.distributions.normal.Normal(mean, std)
         z = dist.rsample().to(self.device)
 
         # if self.run_mode == 'perturb':
@@ -256,7 +258,7 @@ class Db_vae(nn.Module):
         return pred, sigout
 
 
-    def interpolate(self, images: torch.Tensor, amount: int):
+    def interpolate(self, images: torch.Tensor, amount: int, var_to_perturb):
         with torch.no_grad():
 
             _, mean, std, _ = self.encoder(images)
@@ -264,14 +266,14 @@ class Db_vae(nn.Module):
             print(mean.shape)
             print(std.shape)
 
-            mean_1, std_1 = mean[0,:], std[0,:]
-            mean_2, std_2 = mean[1,:], std[1,:]
+            mean_1, std_1 = mean[0,var_to_perturb], std[0,var_to_perturb]
+            mean_2, std_2 = mean[1,var_to_perturb], std[1,var_to_perturb]
 
             all_mean  = torch.tensor([]).to(self.device)
             all_std = torch.tensor([]).to(self.device)
 
-            # print(mean_1)
-            # print(mean_2)
+            # print(f'mean_1: {mean_1}')
+            # print(f'mean_2: {mean_2}')
 
             diff_mean = mean_1 - mean_2
             diff_std = std_1 - std_2
@@ -279,14 +281,16 @@ class Db_vae(nn.Module):
             steps_mean = diff_mean / (amount-1)
             steps_std = diff_std / (amount-1)
 
-            # print(steps_mean)
-            # print(steps_std)
+            # print(f'steps_mean: {steps_mean}')
+            # print(f'steps_std: {steps_std}')
 
             for i in range(amount):
-                all_mean = torch.cat((all_mean, mean_1 - steps_mean*i))
-                all_std = torch.cat((all_std, std_1 - steps_std*i))
-                print(all_mean.shape)
-                print(all_std.shape)
+                mean[0, var_to_perturb] = mean[0, var_to_perturb] - steps_mean * i
+                std[0, var_to_perturb] = std[0, var_to_perturb] - steps_std * i
+                all_mean = torch.cat((all_mean, mean[0, :]))
+                all_std = torch.cat((all_std, std[0, :]))
+                # print(all_mean.shape)
+                # print(all_std.shape)
 
             all_mean = all_mean.view(amount, -1)
             all_std = all_std.view(amount, -1)
@@ -294,8 +298,8 @@ class Db_vae(nn.Module):
             print(all_mean.shape)
             print(all_std.shape)
 
-            print(all_mean)
-            # print(all_std.shape)
+            # print(all_mean)
+            print(all_std)
 
             dist = torch.distributions.normal.Normal(all_mean, all_std)
             z = dist.rsample().to(self.device)
@@ -316,9 +320,73 @@ class Db_vae(nn.Module):
         #     recon_images = self.decoder(z)
 
         # return predictions and the loss
-        return recon_images
+        # return recon_images
 
         return recon_images
+
+    # def interpolate(self, images: torch.Tensor, amount: int, var_to_perturb):
+    #     with torch.no_grad():
+    #
+    #         _, mean, std, _ = self.encoder(images)
+    #
+    #         print(mean.shape)
+    #         print(std.shape)
+    #
+    #         mean_1, std_1 = mean[0,:], std[0,:]
+    #         mean_2, std_2 = mean[1,:], std[1,:]
+    #
+    #         all_mean  = torch.tensor([]).to(self.device)
+    #         all_std = torch.tensor([]).to(self.device)
+    #
+    #         # print(mean_1)
+    #         # print(mean_2)
+    #
+    #         diff_mean = mean_1 - mean_2
+    #         diff_std = std_1 - std_2
+    #
+    #         steps_mean = diff_mean / (amount-1)
+    #         steps_std = diff_std / (amount-1)
+    #
+    #         # print(steps_mean)
+    #         # print(steps_std)
+    #
+    #         for i in range(amount):
+    #             all_mean = torch.cat((all_mean, mean_1 - steps_mean*i))
+    #             all_std = torch.cat((all_std, std_1 - steps_std*i))
+    #             print(all_mean.shape)
+    #             print(all_std.shape)
+    #
+    #         all_mean = all_mean.view(amount, -1)
+    #         all_std = all_std.view(amount, -1)
+    #
+    #         print(all_mean.shape)
+    #         print(all_std.shape)
+    #
+    #         print(all_mean)
+    #         # print(all_std.shape)
+    #
+    #         dist = torch.distributions.normal.Normal(all_mean, all_std)
+    #         z = dist.rsample().to(self.device)
+    #
+    #         recon_images = self.decoder(z)
+    #
+    #
+    #     # with torch.no_grad():
+    #     #     pred, mean, std, _ = self.encoder(images)
+    #     #
+    #     #     print(mean.shape)
+    #     #     print(std.shape)
+    #     #
+    #     #     # Get single samples from the distributions with reparametrisation trick
+    #     #     dist = torch.distributions.normal.Normal(mean, std)
+    #     #     z = dist.rsample().to(self.device)
+    #     #
+    #     #     recon_images = self.decoder(z)
+    #
+    #     # return predictions and the loss
+    #     # return recon_images
+    #
+    #     return recon_images
 
     def build_means(self, input: torch.Tensor):
         # print(f'build_means input: {input.shape}')

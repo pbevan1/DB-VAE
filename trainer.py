@@ -202,9 +202,13 @@ class Trainer:
 
             steps = 8
 
-            images = sample_dataset(data, 2).to(device)
+            # images = sample_dataset(data, 2).to(device)
 
-            recon_images = model.interpolate(images, steps)
+            images = torch.stack([data[self.config.interp1][0], data[self.config.interp2][0]])
+
+            # recon_images = torch.stack([data[i][0] for i in range(64,72)])
+
+            recon_images = model.interpolate(images, steps, var_to_perturb)
 
             print(recon_images.shape)
 
@@ -212,11 +216,11 @@ class Trainer:
 
             for i, im in enumerate(recon_images):
                 fig.add_subplot(1, steps+1, i+1)
-                grid = make_grid(recon_images[i].reshape(1,3,128,128), 1)
+                grid = make_grid(recon_images[i].reshape(1,3,ARGS.image_size,ARGS.image_size), 1)
                 plt.imshow(grid.permute(1,2,0).cpu())
                 utils.remove_frame(plt)
 
-            fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/perturbations/perturb'
+            fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/perturbations/perturbxx_{var_to_perturb}'
                         f'.png', bbox_inches='tight',dpi=300)
 
         else:
@@ -229,13 +233,13 @@ class Trainer:
             fig=plt.figure(figsize=(16, 8))
 
             fig.add_subplot(1, 2, 1)
-            grid = make_grid(images.reshape(n_samples,3,128,128), n_rows)
+            grid = make_grid(images.reshape(n_samples,3,ARGS.image_size,ARGS.image_size), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
 
             utils.remove_frame(plt)
 
             fig.add_subplot(1, 2, 2)
-            grid = make_grid(recon_images.reshape(n_samples,3,128,128), n_rows)
+            grid = make_grid(recon_images.reshape(n_samples,3,ARGS.image_size,ARGS.image_size), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
 
             utils.remove_frame(plt)
@@ -248,8 +252,8 @@ class Trainer:
                 return fig
 
     def perturb(self):
-        # for i in range(ARGS.var_to_perturb):
-        self.print_reconstruction(self.model, self.valid_loader.dataset, 0, self.device) #, var_to_perturb=i)
+        for i in range(ARGS.var_to_perturb):
+            self.print_reconstruction(self.model, self.valid_loader.dataset, 0, self.device, var_to_perturb=i)
 
 
     def _save_epoch(self, epoch: int, train_loss: float, val_loss: float, train_acc: float, val_acc: float):
@@ -303,7 +307,7 @@ class Trainer:
 
         for i in range(2):
             ax = fig.add_subplot(1, 2, i+1)
-            grid = make_grid(img_list[i].reshape(n_samples,3,128,128), n_rows)
+            grid = make_grid(img_list[i].reshape(n_samples,3,ARGS.image_size,ARGS.image_size), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
             ax.set_title(f'{titles[i]}\nMean Sample Prob: {Decimal(str(mean_probs[i]))}', fontdict={"fontsize":18}, pad=20)
 
@@ -459,7 +463,7 @@ class Trainer:
         sample_images = self.model.sample(n_samples = n_samples)
 
         plt.figure(figsize=(n_rows*2,n_rows*2))
-        grid = make_grid(sample_images.reshape(n_samples,3,128,128), n_rows)
+        grid = make_grid(sample_images.reshape(n_samples,3,ARGS.image_size,ARGS.image_size), n_rows)
         plt.imshow(grid.permute(1,2,0).cpu())
 
         utils.remove_frame(plt)
@@ -488,7 +492,7 @@ class Trainer:
             images = utils.sample_idxs_from_loader(indices, data_loader, labels[0])
 
             ax = fig.add_subplot(2, 2, i+1)
-            grid = make_grid(images.reshape(n_samples,3,128,128), n_rows)
+            grid = make_grid(images.reshape(n_samples,3,ARGS.image_size,ARGS.image_size), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
             ax.set_title(sub_titles[i], fontdict={"fontsize":30})
 

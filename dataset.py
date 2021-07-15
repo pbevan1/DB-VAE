@@ -149,9 +149,9 @@ def get_df():
         df_train.loc[(df_train.year == 2020), 'fold'] = df_train['tfrecord'].map(tfrecord2fold)
         #putting image filepath into column
         df_train.loc[(df_train.year == 2020), 'filepath'] = df_train['image_name'].apply(
-            lambda x: os.path.join(f'{ARGS.image_dir}/isic_20_train_128/{x}.jpg'))
+            lambda x: os.path.join(f'{ARGS.image_dir}/isic_20_train_{ARGS.image_size}/{x}.jpg'))
         df_train.loc[(df_train.year != 2020), 'filepath'] = df_train['image_name'].apply(
-            lambda x: os.path.join(f'{ARGS.image_dir}/isic_19_train_128', f'{x}.jpg'))
+            lambda x: os.path.join(f'{ARGS.image_dir}/isic_19_train_{ARGS.image_size}', f'{x}.jpg'))
 
         # # mapping image size to index as proxy for instrument
         # size2idx = {d: idx for idx, d in enumerate(sorted(df_train['size'].unique()))}

@@ -22,7 +22,7 @@ class GenericImageDataset(Dataset):
         sub_images_nr_windows: int = 10,
         sub_images_batch_size: int = 10,
         sub_images_min_size: int = 30,
-        sub_images_max_size: int = 128,
+        sub_images_max_size: int = ARGS.image_size,
         sub_images_stride: float = 0.2,
         transform: Callable = default_transform, ###
         **kwargs

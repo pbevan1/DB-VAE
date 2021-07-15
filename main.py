@@ -31,7 +31,6 @@ def make_evaluator(config: Config, trained_model: Optional = None):
      """Creates an Evaluator object which is ready to .eval on, or .eval_on_setups in case of the automated experience. """
      return Evaluator(
           nr_windows=config.sub_images_nr_windows,
-          path_to_eval_dataset=config.path_to_eval_face_images,
           config=config,
           model=trained_model,
           **asdict(config)
