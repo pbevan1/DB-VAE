@@ -3,6 +3,7 @@ import torch.nn as nn
 from typing import Optional
 import datetime
 import os
+import pickle
 from tqdm import tqdm
 from logger import logger
 from torch.utils.data.dataset import Dataset
@@ -208,9 +209,9 @@ class Trainer:
 
             # recon_images = torch.stack([data[i][0] for i in range(64,72)])
 
-            recon_images = model.interpolate(images, steps, var_to_perturb)
+            recon_images = model.perturb_var(images, steps, var_to_perturb)
 
-            print(recon_images.shape)
+            # print(recon_images.shape)
 
             fig = plt.figure(figsize=(16, steps))
 
@@ -221,7 +222,31 @@ class Trainer:
                 utils.remove_frame(plt)
 
             fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/perturbations/perturbxx_{var_to_perturb}'
-                        f'.png', bbox_inches='tight',dpi=300)
+                        f'.png', bbox_inches='tight', dpi=128)
+
+        elif self.config.run_mode == 'interpolate':
+            steps = 8
+
+            # images = sample_dataset(data, 2).to(device)
+
+            images = torch.stack([data[self.config.interp1][0], data[self.config.interp2][0]])
+
+            # recon_images = torch.stack([data[i][0] for i in range(64,72)])
+
+            recon_images = model.interpolate(images, steps)
+
+            # print(recon_images.shape)
+
+            fig = plt.figure(figsize=(16, steps))
+
+            for i, im in enumerate(recon_images):
+                fig.add_subplot(1, steps+1, i+1)
+                grid = make_grid(recon_images[i].reshape(1,3,ARGS.image_size,ARGS.image_size), 1)
+                plt.imshow(grid.permute(1,2,0).cpu())
+                utils.remove_frame(plt)
+
+            fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/interpolate'
+                        f'.png', bbox_inches='tight', dpi=128)
 
         else:
             images = sample_dataset(data, n_samples).to(device)
@@ -252,8 +277,13 @@ class Trainer:
                 return fig
 
     def perturb(self):
-        for i in range(ARGS.var_to_perturb):
+        with open(f'results/logs/{self.config.test_no}/variable_idxs.pkl', 'rb') as f:
+            variable_idxs = pickle.load(f)
+        for i in variable_idxs[:ARGS.var_to_perturb]:
             self.print_reconstruction(self.model, self.valid_loader.dataset, 0, self.device, var_to_perturb=i)
+
+    def interpolate(self):
+        self.print_reconstruction(self.model, self.valid_loader.dataset, 0, self.device)
 
 
     def _save_epoch(self, epoch: int, train_loss: float, val_loss: float, train_acc: float, val_acc: float):
@@ -436,7 +466,7 @@ class Trainer:
                 all_labels = torch.cat((all_labels, labels))
                 all_index = torch.cat((all_index, index))
 
-                if self.debias_type == "max" or self.debias_type == "max5":
+                if self.debias_type == "max" or self.debias_type == "max5" or self.debias_type == "max50":
                     self.model.build_means(images)
 
                 elif self.debias_type == "gaussian":
@@ -446,6 +476,8 @@ class Trainer:
                 probs = self.model.get_histo_max()
             elif self.debias_type == "max5":
                 probs = self.model.get_histo_max5()
+            elif self.debias_type == "max50":
+                probs = self.model.get_histo_max50()
             elif self.debias_type == "gaussian":
                 probs = self.model.get_histo_gaussian()
             else:
@@ -455,6 +487,8 @@ class Trainer:
                 raise Exception
 
         self.visualize_bias(probs, data_loader, all_labels, all_index, epoch)
+
+        print(probs.shape)
 
         return probs
 

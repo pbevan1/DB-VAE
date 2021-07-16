@@ -47,7 +47,7 @@ parser.add_argument('--run-mode', type=str, help='Type of main.py run')
 parser.add_argument('--perturbation-range', type=float, nargs='+', help='list of 7 values to perturb by', default=[])
 parser.add_argument('--interp1', type=int, help='first image to interpolate', default=0)
 parser.add_argument('--interp2', type=int, help='second image to interpolate', default=0)
-parser.add_argument('--var-to-perturb', type=int, help='latent variable to perturb', default=0)
+parser.add_argument('--var-to-perturb', type=int, help='latent variable to perturb', default=5)
 parser.add_argument('-f', type=str, help='Path to kernel json')
 
 

@@ -96,10 +96,14 @@ if __name__ == "__main__":
           logger.info("Running evaluation only")
           evaluator = make_evaluator(config)
           evaluator.eval_on_setups('run_mode')
-     if config.run_mode == 'perturb':
-          logger.info("Running reconstruction only")
+     elif config.run_mode == 'perturb':
+          logger.info("Running perturbation only")
           trainer = make_trainer(config)
           trainer.perturb()
+     elif config.run_mode == 'interpolate':
+          logger.info("Running interpolation only")
+          trainer = make_trainer(config)
+          trainer.interpolate()
      else:
           logger.info("Running training and evaluation of this model")
 
