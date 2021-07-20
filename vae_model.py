@@ -1,7 +1,6 @@
 """
 Here the structure of the network is made in pytorch
 """
-
 from typing import List, Union, Optional
 import torch
 import os
@@ -67,14 +66,12 @@ class Encoder(nn.Module):
         """
         Perform forward pass of encoder.
         """
-        # print(f'Encoder input shape: {input.shape}')
         out = self.layers(input)
-        # print(f'Encoder out shape: {out.shape}')
 
         sigout = self.sigmoid(out)
 
         # return classification, mean and log_std
-        return out[:, 0], out[:, 1:self.z_dim+1], F.softplus(out[:,self.z_dim+1:]), sigout ################## adjust rest of code to use this
+        return out[:, 0], out[:, 1:self.z_dim+1], F.softplus(out[:,self.z_dim+1:]), sigout
 
 
 class UnFlatten(nn.Module):
@@ -84,7 +81,6 @@ class UnFlatten(nn.Module):
         self.image_size = image_size
 
     def forward(self, input):
-        # print(f'out shape: {input.shape}')
         return input.view(-1, self.channel_size, self.image_size, self.image_size)
 
 class Decoder(nn.Module):
@@ -132,18 +128,14 @@ class Decoder(nn.Module):
         """
         Perform forward pass of encoder.
         """
-
-        # print(f'Decoder in shape: {input.shape}')
         out = self.layers(input)
-        # print(f'Decoder out shape: {out.shape}')
-
         return out
 
 
 class Db_vae(nn.Module):
     def __init__(
         self,
-        config=None,
+        args,
         z_dim: int = 20,
         hist_size: int = 1000,
         alpha: float = 0.01,
@@ -154,14 +146,14 @@ class Db_vae(nn.Module):
     ):
         super().__init__()
 
+        self.args = args
         self.device = device
         self.z_dim = z_dim
-        self.config = config
-        self.run_mode = self.config.run_mode
+        self.run_mode = self.args.run_mode
         self.encoder = Encoder(z_dim, custom_encoding_layers)
         self.decoder = Decoder(z_dim, custom_decoding_layers)
 
-        if ARGS.DP:
+        if args.DP:
             self.encoder = nn.DataParallel(self.encoder)
             self.decoder = nn.DataParallel(self.decoder)
 
@@ -182,7 +174,7 @@ class Db_vae(nn.Module):
         self.alpha = alpha
 
     @staticmethod
-    def init(config, path_to_model: str, device: str, z_dim: int):
+    def init(path_to_model: str, device: str, z_dim: int):
         full_path_to_model = f"results/weights/{path_to_model}/model.pt"
         if not os.path.exists(full_path_to_model):
             logger.error(
@@ -192,7 +184,7 @@ class Db_vae(nn.Module):
             )
             raise Exception
 
-        model: Db_vae = Db_vae(config=config, z_dim=z_dim, device=device)
+        model: Db_vae = Db_vae(z_dim=z_dim, device=device)
 
         try:
             model.load_state_dict(torch.load(full_path_to_model, map_location=device))
@@ -215,17 +207,9 @@ class Db_vae(nn.Module):
 
         loss_class = F.binary_cross_entropy_with_logits(pred, labels.float(), reduction='none')
 
-        # We only want to calculate the loss towards actual faces
-        # faceslicer = labels == 1
-        # facemean = mean #[faceslicer]
-        # facestd = std #[faceslicer]
-
         # Get single samples from the distributions with reparametrisation trick
         dist = torch.distributions.normal.Normal(mean, std)
         z = dist.rsample().to(self.device)
-
-        # if self.run_mode == 'perturb':
-        #     z = z[0]*2
 
         res = self.decoder(z)
 
@@ -239,10 +223,6 @@ class Db_vae(nn.Module):
 
         loss_vae = self.c2 * loss_recon + self.c3 * loss_kl
         loss_total = self.c1 * loss_class
-
-        # # Only add loss to positions of faces, rest is zero
-        # zeros = torch.zeros(faceslicer.shape[0]).to(self.device)
-        # zeros[faceslicer] = loss_vae
 
         loss_total = loss_total + loss_vae #+ zeros
 
@@ -264,17 +244,11 @@ class Db_vae(nn.Module):
 
             _, mean, std, _ = self.encoder(images)
 
-            print(f'mean shape: {mean.shape}')
-            print(f'std shape: {std.shape}')
-
             mean_1, std_1 = mean[0,var_to_perturb], std[0,var_to_perturb]
             mean_2, std_2 = mean[1,var_to_perturb], std[1,var_to_perturb]
 
             all_mean  = torch.tensor([]).to(self.device)
             all_std = torch.tensor([]).to(self.device)
-
-            print(f'mean_1: {mean_1}')
-            print(f'mean_2: {mean_2}')
 
             diff_mean = mean_1 - mean_2
             diff_std = std_1 - std_2
@@ -282,46 +256,19 @@ class Db_vae(nn.Module):
             steps_mean = diff_mean / (amount-1)
             steps_std = diff_std / (amount-1)
 
-            print(f'steps_mean: {steps_mean}')
-            print(f'steps_std: {steps_std}')
-
             for i in range(amount):
                 mean[0, var_to_perturb] = mean[0, var_to_perturb] - steps_mean * i
                 std[0, var_to_perturb] = std[0, var_to_perturb] - steps_std * i
                 all_mean = torch.cat((all_mean, mean[0, :]))
                 all_std = torch.cat((all_std, std[0, :]))
-                # print(all_mean.shape)
-                # print(all_std.shape)
 
             all_mean = all_mean.view(amount, -1)
             all_std = all_std.view(amount, -1)
-
-            print(f'all_mean shape: {all_mean.shape}')
-            print(f'all_std shape: {all_std.shape}')
-
-            # print(all_mean)
-            # print(all_std)
 
             dist = torch.distributions.normal.Normal(all_mean, all_std)
             z = dist.rsample().to(self.device)
 
             recon_images = self.decoder(z)
-
-
-        # with torch.no_grad():
-        #     pred, mean, std, _ = self.encoder(images)
-        #
-        #     print(mean.shape)
-        #     print(std.shape)
-        #
-        #     # Get single samples from the distributions with reparametrisation trick
-        #     dist = torch.distributions.normal.Normal(mean, std)
-        #     z = dist.rsample().to(self.device)
-        #
-        #     recon_images = self.decoder(z)
-
-        # return predictions and the loss
-        # return recon_images
 
         return recon_images
 
@@ -329,9 +276,6 @@ class Db_vae(nn.Module):
         with torch.no_grad():
 
             _, mean, std, _ = self.encoder(images)
-
-            print(mean.shape)
-            print(std.shape)
 
             mean_1, std_1 = mean[0,:], std[0,:]
             mean_2, std_2 = mean[1,:], std[1,:]
@@ -357,25 +301,9 @@ class Db_vae(nn.Module):
 
             recon_images = self.decoder(z)
 
-        # with torch.no_grad():
-        #     pred, mean, std, _ = self.encoder(images)
-        #
-        #     print(mean.shape)
-        #     print(std.shape)
-        #
-        #     # Get single samples from the distributions with reparametrisation trick
-        #     dist = torch.distributions.normal.Normal(mean, std)
-        #     z = dist.rsample().to(self.device)
-        #
-        #     recon_images = self.decoder(z)
-
-        # return predictions and the loss
-        # return recon_images
-
         return recon_images
 
     def build_means(self, input: torch.Tensor):
-        # print(f'build_means input: {input.shape}')
         _, mean, log_std, _ = self.encoder(input)
 
         self.means = torch.cat((self.means, mean))
@@ -447,7 +375,6 @@ class Db_vae(nn.Module):
         probs = probs.sort(1, descending=True)[0][:,:5]
         probs = probs.prod(1)
 
-        # print(probs)
         return probs
 
     def get_histo_max50(self):
@@ -474,8 +401,7 @@ class Db_vae(nn.Module):
         probs = probs.sort(1, descending=True)[0][:,:50]
         probs = probs.prod(1)
 
-        print(f'probs_idx shape: {probs_idx.shape}')
-        with open(f'results/logs/{self.config.test_no}/variable_idxs.pkl', 'wb') as f:
+        with open(f'results/logs/{self.args.test_no}/variable_idxs.pkl', 'wb') as f:
             pickle.dump(probs_idx, f)
         return probs
 
@@ -497,7 +423,7 @@ class Db_vae(nn.Module):
             Q = lins * self.hist
             Q = Q.sum(-1)
             W = 1 / (Q + self.alpha)
-            # Performing the max value technique, TODO: analyse top 5
+            # Performing the max value technique
             results[i:i_end] = W.max(-1)
 
         # # Reset values
@@ -510,36 +436,11 @@ class Db_vae(nn.Module):
         with torch.no_grad():
             pred, mean, std, _ = self.encoder(images)
 
-            print(mean.shape)
-            print(std.shape)
-
             # Get single samples from the distributions with reparametrisation trick
             dist = torch.distributions.normal.Normal(mean, std)
             z = dist.rsample().to(self.device)
 
             recon_images = self.decoder(z)
-
-        # return predictions and the loss
-        return recon_images
-
-    def recon_images_perturb(self, images: torch.Tensor, var_to_perturb):
-        with torch.no_grad():
-            pred, mean, std, _ = self.encoder(images)
-
-            perturbation_range = self.config.perturbation_range
-            var_to_perturb = var_to_perturb #self.config.var_to_perturb
-            recon_images = []
-            for p in perturbation_range:
-                mean[:,var_to_perturb] = mean[:,var_to_perturb] * p
-                std[:, var_to_perturb] = std[:, var_to_perturb] * p
-                # Get single samples from the distributions with reparametrisation trick
-
-                dist = torch.distributions.normal.Normal(mean, std)
-                z = dist.rsample().squeeze().to(self.device)
-                # print(z[55])
-                # z[var_to_perturb] = z[var_to_perturb] + p #adding perturbation value to specified latent variable
-                recon_image = self.decoder(z.unsqueeze(0))
-                recon_images.append(recon_image)
 
         # return predictions and the loss
         return recon_images

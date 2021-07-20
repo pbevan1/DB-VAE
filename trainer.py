@@ -1,96 +1,78 @@
 import torch
-import torch.nn as nn
 from typing import Optional
 import datetime
 import os
 import pickle
 from tqdm import tqdm
 from logger import logger
-from torch.utils.data.dataset import Dataset
-import numpy as np
 from decimal import Decimal
+import numpy as np
+from matplotlib import pyplot as plt
+from torch.utils.data.dataset import Dataset
+from torch.utils.data.sampler import RandomSampler
+from torchvision.utils import make_grid
 
 from setup import init_trainining_results
 from vae_model import Db_vae
-from datasets.data_utils import DataLoaderTuple, DatasetOutput
-from datasets.celeb_a import *
+from datasets.data_utils import DatasetOutput
 import utils
 from dataset import *
 from datasets.generic import *
 
-from torchvision.utils import make_grid
-from matplotlib import pyplot as plt
-
 class Trainer:
     def __init__(
         self,
-        epochs: int,
-        batch_size: int,
-        hist_size: int,
-        z_dim: int,
-        alpha: float,
-        num_bins: int,
-        max_images: int,
-        debias_type: str,
-        device: str,
+        args,
+        device,
         lr: float = 0.001,
-        eval_freq: int = 36,
         optimizer = torch.optim.Adam,
-        load_model: bool = False,
-        path_to_model: Optional[str] = None,
-        config: Optional = None,
         **kwargs
     ):
         """Wrapper class which trains a model."""
-        init_trainining_results(config)
-        self.epochs = epochs
-        self.load_model = load_model
-        self.z_dim = z_dim
-        self.path_to_model = path_to_model
-        self.batch_size = batch_size
-        self.hist_size = hist_size
-        self.alpha = alpha
-        self.num_bins = num_bins
-        self.debias_type = debias_type
+        init_trainining_results()
+        self.args = args
+        self.epochs = args.epochs
+        self.load_model = args.load_model
+        self.z_dim = args.z_dim
+        self.path_to_model = args.test_no
+        self.batch_size = args.batch_size
+        self.hist_size = args.hist_size
+        self.alpha = args.alpha
+        self.num_bins = args.num_bins
+        self.debias_type = args.debias_type
         self.device = device
-        self.eval_freq = eval_freq
-
-        self.config = config
 
         new_model: Db_vae = Db_vae(
-            z_dim=z_dim,
-            hist_size=hist_size,
-            alpha=alpha,
-            num_bins=num_bins,
+            args=self.args,
+            z_dim=self.z_dim,
+            hist_size=self.hist_size,
+            alpha=self.alpha,
+            num_bins=self.num_bins,
             device=self.device,
-            config=self.config
         ).to(device=self.device)
 
         self.model = self.init_model()
 
         self.optimizer = optimizer(params=self.model.parameters(), lr=lr)
 
-        train_loaders: DataLoaderTuple
-        valid_loaders: DataLoaderTuple
-
         df_train, df_val, df_test, mel_idx = get_df()
 
-        if ARGS.DEBUG:
-            df_train = df_train.sample(ARGS.batch_size * 3)
+        if self.args.DEBUG:
+            df_train = df_train.sample(self.batch_size * 3)
 
         self.df_train = df_train
         self.train_len = len(df_train)
         self.df_valid = df_val
 
         dataset_train = GenericImageDataset(csv=self.df_train)
-        train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=ARGS.batch_size,
+        train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=self.batch_size,
                                                    sampler=RandomSampler(dataset_train),
-                                                   num_workers=ARGS.num_workers, drop_last=True)
+                                                   num_workers=self.args.num_workers, drop_last=True)
 
         dataset_valid = GenericImageDataset(csv=self.df_valid)
-        valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=ARGS.batch_size,
+        valid_loader = torch.utils.data.DataLoader(dataset_valid, batch_size=self.batch_size,
                                                    sampler=RandomSampler(dataset_valid),
-                                                   num_workers=ARGS.num_workers, drop_last=True)
+                                                   num_workers=self.args.num_workers, drop_last=True)
 
         self.train_loader = train_loader
         self.valid_loader = valid_loader
@@ -115,7 +97,7 @@ class Trainer:
                 raise Exception
 
             logger.info(f"Initializing model from {self.path_to_model}")
-            return Db_vae.init(config=self.config, path_to_model=self.path_to_model, device=self.device, z_dim=self.z_dim).to(self.device)
+            return Db_vae.init(path_to_model=self.path_to_model, device=self.device, z_dim=self.z_dim).to(self.device)
 
         # Model is newly initialized
         logger.info(f"Creating new model with the following parameters:\n"
@@ -126,7 +108,7 @@ class Trainer:
         )
 
         return Db_vae(
-            config=self.config,
+            args=self.args,
             z_dim=self.z_dim,
             hist_size=self.hist_size,
             alpha=self.alpha,
@@ -160,135 +142,97 @@ class Trainer:
             logger.info(f"epoch {epoch+1}/{epochs} => val_loss={val_loss:.2f}, val_acc={val_acc:.2f}")
 
             # Print reconstruction
-            # valid_data = concat_datasets(self.valid_loaders.dataset, self.valid_loaders.nonfaces.dataset, proportion_a=0.5)
             self.print_reconstruction(self.model, self.valid_loader.dataset, epoch, self.device)
 
             # Save model and scores
-            if epoch+1 == ARGS.epochs:
+            if epoch+1 == self.args.epochs:
                 self._save_epoch(epoch, train_loss, val_loss, train_acc, val_acc)
 
         logger.success(f"Finished training on {epochs} epochs.")
 
-
-    def print_reconstruction(self, model, data, epoch, device, n_rows=4, save=True, var_to_perturb=None):
+    #Outputting reconstructed input
+    def print_reconstruction(self, model, data, epoch, device, n_rows=4, save=True):
         # TODO: Add annotation
         model.eval()
         n_samples = n_rows**2
+        images = sample_dataset(data, n_samples).to(device)
+        recon_images = model.recon_images(images)
+        fig = plt.figure(figsize=(16, 8))
 
-        if self.config.run_mode=='perturb':
+        fig.add_subplot(1, 2, 1)
+        grid = make_grid(images.reshape(n_samples,3,self.args.image_size,self.args.image_size), n_rows)
+        plt.imshow(grid.permute(1,2,0).cpu())
 
-            # images = sample_dataset(data, 1).to(device)
-            #
-            # recon_images = model.recon_images_perturb(images, var_to_perturb)
-            #
-            # num_perturbs = len(self.config.perturbation_range)
-            #
-            # fig=plt.figure(figsize=(16, num_perturbs+1))
-            #
-            # fig.add_subplot(1, num_perturbs+1, 1)
-            # grid = make_grid(images.reshape(1,3,128,128), 1)
-            # plt.imshow(grid.permute(1,2,0).cpu())
-            # utils.remove_frame(plt)
-            #
-            #
-            # for i in range (2,2+num_perturbs):
-            #     fig.add_subplot(1, num_perturbs+1, i)
-            #     grid = make_grid(recon_images[i-2].reshape(1,3,128,128), n_rows)
-            #     plt.imshow(grid.permute(1,2,0).cpu())
-            #     utils.remove_frame(plt)
-            #
-            # fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/perturbations/perturb_var_{var_to_perturb}'
-            #             f'.png', bbox_inches='tight',dpi=300)
-            # plt.close()
+        utils.remove_frame(plt)
 
-            steps = 8
+        fig.add_subplot(1, 2, 2)
+        grid = make_grid(recon_images.reshape(n_samples,3,self.args.image_size,self.args.image_size), n_rows)
+        plt.imshow(grid.permute(1,2,0).cpu())
 
-            # images = sample_dataset(data, 2).to(device)
+        utils.remove_frame(plt)
 
-            images = torch.stack([data[self.config.interp1][0], data[self.config.interp2][0]])
+        if save:
+            fig.savefig(f'results/plots/{self.args.test_no}/reconstructions/epoch_{epoch+1}.png', bbox_inches='tight', dpi=128)
 
-            # recon_images = torch.stack([data[i][0] for i in range(64,72)])
-
-            recon_images = model.perturb_var(images, steps, var_to_perturb)
-
-            # print(recon_images.shape)
-
-            fig = plt.figure(figsize=(16, steps))
-
-            for i, im in enumerate(recon_images):
-                fig.add_subplot(1, steps+1, i+1)
-                grid = make_grid(recon_images[i].reshape(1,3,ARGS.image_size,ARGS.image_size), 1)
-                plt.imshow(grid.permute(1,2,0).cpu())
-                utils.remove_frame(plt)
-
-            fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/perturbations/perturbxx_{var_to_perturb}'
-                        f'.png', bbox_inches='tight', dpi=128)
-
-        elif self.config.run_mode == 'interpolate':
-            steps = 8
-
-            # images = sample_dataset(data, 2).to(device)
-
-            images = torch.stack([data[self.config.interp1][0], data[self.config.interp2][0]])
-
-            # recon_images = torch.stack([data[i][0] for i in range(64,72)])
-
-            recon_images = model.interpolate(images, steps)
-
-            # print(recon_images.shape)
-
-            fig = plt.figure(figsize=(16, steps))
-
-            for i, im in enumerate(recon_images):
-                fig.add_subplot(1, steps+1, i+1)
-                grid = make_grid(recon_images[i].reshape(1,3,ARGS.image_size,ARGS.image_size), 1)
-                plt.imshow(grid.permute(1,2,0).cpu())
-                utils.remove_frame(plt)
-
-            fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/interpolate'
-                        f'.png', bbox_inches='tight', dpi=128)
-
+            plt.close()
         else:
-            images = sample_dataset(data, n_samples).to(device)
-
-            recon_images = model.recon_images(images)
-
-            print(recon_images.shape)
-
-            fig=plt.figure(figsize=(16, 8))
-
-            fig.add_subplot(1, 2, 1)
-            grid = make_grid(images.reshape(n_samples,3,ARGS.image_size,ARGS.image_size), n_rows)
-            plt.imshow(grid.permute(1,2,0).cpu())
-
-            utils.remove_frame(plt)
-
-            fig.add_subplot(1, 2, 2)
-            grid = make_grid(recon_images.reshape(n_samples,3,ARGS.image_size,ARGS.image_size), n_rows)
-            plt.imshow(grid.permute(1,2,0).cpu())
-
-            utils.remove_frame(plt)
-
-            if save:
-                fig.savefig(f'results/plots/{self.config.test_no}/reconstructions/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
-
-                plt.close()
-            else:
-                return fig
+            return fig
 
     def perturb(self):
-        with open(f'results/logs/{self.config.test_no}/variable_idxs.pkl', 'rb') as f:
+        with open(f'results/logs/{self.args.test_no}/variable_idxs.pkl', 'rb') as f:
             variable_idxs = pickle.load(f)
-        for i in variable_idxs[:ARGS.var_to_perturb]:
-            self.print_reconstruction(self.model, self.valid_loader.dataset, 0, self.device, var_to_perturb=i)
+        for i, idx in enumerate(variable_idxs):
+            print(i, idx)
+        for var in tqdm(variable_idxs[:self.args.var_to_perturb]):
+            self.model.eval()
+            steps = 8
+            data = self.valid_loader.dataset
+            images = torch.stack([data[self.args.interp1][0], data[self.args.interp2][0]])
+            recon_images = self.model.perturb_var(images, steps, var)
+            fig = plt.figure(figsize=(16, 4))
+
+            fig.add_subplot(1, steps+2, 1)
+            grid = make_grid(images[0].reshape(1, 3, self.args.image_size, self.args.image_size), 1)
+            plt.gca().set_title('source\nimage', fontsize=16)
+            plt.imshow(grid.permute(1, 2, 0).cpu())
+            utils.remove_frame(plt)
+
+            for i, im in enumerate(recon_images):
+                fig.add_subplot(1, steps+2, i+2)
+                grid = make_grid(recon_images[i].reshape(1,3,self.args.image_size,self.args.image_size), 1)
+                plt.imshow(grid.permute(1,2,0).cpu())
+                utils.remove_frame(plt)
+
+            fig.add_subplot(1, steps+2, steps+2)
+            grid = make_grid(images[1].reshape(1, 3, self.args.image_size, self.args.image_size), 1)
+            plt.gca().set_title('target\nimage', fontsize=16)
+            plt.imshow(grid.permute(1, 2, 0).cpu())
+            utils.remove_frame(plt)
+
+            fig.savefig(f'results/plots/{self.args.test_no}/reconstructions/perturbations/perturb_{var}'
+                        f'.png', bbox_inches='tight', dpi=300)
+            plt.close()
 
     def interpolate(self):
-        self.print_reconstruction(self.model, self.valid_loader.dataset, 0, self.device)
+        self.model.eval()
+        data = self.valid_loader.dataset
+        steps = 8
+        images = torch.stack([data[self.args.interp1][0], data[self.args.interp2][0]])
+        recon_images = self.model.interpolate(images, steps)
+        fig = plt.figure(figsize=(16, steps))
+        for i, im in enumerate(recon_images):
+            fig.add_subplot(1, steps + 1, i + 1)
+            grid = make_grid(recon_images[i].reshape(1, 3, self.args.image_size, self.args.image_size), 1)
+            plt.imshow(grid.permute(1, 2, 0).cpu())
+            utils.remove_frame(plt)
+        fig.savefig(f'results/plots/{self.args.test_no}/reconstructions/interpolate'
+                    f'.png', bbox_inches='tight', dpi=128)
+        plt.close()
 
 
     def _save_epoch(self, epoch: int, train_loss: float, val_loss: float, train_acc: float, val_acc: float):
         """Writes training and validation scores to a csv, and stores a model to disk."""
-        if not self.config.test_no:
+        if not self.args.test_no:
             logger.warning(f"`--run_folder` could not be found.",
                            f"The program will continue, but won't save anything",
                            f"Double-check if --run_folder is configured."
@@ -297,56 +241,46 @@ class Trainer:
             return
 
         # Write epoch metrics
-        path_to_results = f"results/logs/{self.config.test_no}/training_results.csv"
+        path_to_results = f"results/logs/{self.args.test_no}/training_results.csv"
         with open(path_to_results, "a") as wf:
             wf.write(f"{epoch+1}, {train_loss}, {val_loss}, {train_acc}, {val_acc}\n")
 
         # Write model to disk
-        path_to_model = f"results/weights/{self.config.test_no}/model.pt"
+        path_to_model = f"results/weights/{self.args.test_no}/model.pt"
         torch.save(self.model.state_dict(), path_to_model)
 
-        logger.save(f"Stored model and results at results/{self.config.test_no}")
+        logger.save(f"Stored model and results at results/{self.args.test_no}")
 
     def visualize_bias(self, probs, data_loader, all_labels, all_index, epoch, n_rows=3):
         # TODO: Add annotation
         n_samples = n_rows ** 2
-
+        #getting images with highest and lowest probability of being sampled
         highest_probs_idx = probs.argsort(descending=True)[:n_samples]
         lowest_probs_idx = probs.argsort()[:n_samples]
-
+        #Getting mean sampling probability
         mean_probs = [np.mean(probs[highest_probs_idx].detach().cpu().numpy()),
                       np.mean(probs[lowest_probs_idx].detach().cpu().numpy())]
-
-        print(mean_probs)
 
         highest_imgs = utils.sample_idxs_from_loader(all_index[highest_probs_idx], data_loader, 1)
         lowest_imgs = utils.sample_idxs_from_loader(all_index[lowest_probs_idx], data_loader, 1)
 
-        for i, (im, im2) in enumerate(zip(highest_imgs, lowest_imgs)):
-            with torch.no_grad():
-                im = im.unsqueeze_(0)
-                im2 = im2.unsqueeze_(0)
-                im = utils.inv_normalize(im[0])
-                im2 = utils.inv_normalize(im2[0])
-                highest_imgs[i] = im
-                lowest_imgs[i] = im2
-
         img_list = (highest_imgs, lowest_imgs)
-        titles = ("Most Biased", "Least Biased")
+        titles = ("Lowest Representation", "Highest Representation")
         fig = plt.figure(figsize=(16, 16))
 
         for i in range(2):
             ax = fig.add_subplot(1, 2, i+1)
-            grid = make_grid(img_list[i].reshape(n_samples,3,ARGS.image_size,ARGS.image_size), n_rows)
+            grid = make_grid(img_list[i].reshape(n_samples,3,self.args.image_size,self.args.image_size), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
-            ax.set_title(f'{titles[i]}\nMean Sample Prob: {Decimal(str(mean_probs[i]))}', fontdict={"fontsize":18}, pad=20)
+            # ax.set_title(f'{titles[i]}\nMean Sample Prob: {Decimal(str(mean_probs[i])):.3e}', fontdict={"fontsize":18}, pad=20)
+            ax.set_title(f'{titles[i]}', fontdict={"fontsize": 18}, pad=20)
 
             utils.remove_frame(plt)
 
-        path_to_results = f"results/plots/{self.config.test_no}/bias_probs/epoch_{epoch+1}.png"
+        path_to_results = f"results/plots/{self.args.test_no}/bias_probs/epoch_{epoch+1}.png"
         logger.save(f"Saving a bias probability figure in {path_to_results}")
 
-        fig.savefig(path_to_results, bbox_inches='tight', dpi=300)
+        fig.savefig(path_to_results, bbox_inches='tight', dpi=128)
         plt.close()
 
 
@@ -364,7 +298,7 @@ class Trainer:
         count = 0
 
         with torch.no_grad():
-            for i, (images, labels, idxs, _) in enumerate(self.valid_loader):
+            for i, (images, labels, idxs) in enumerate(self.valid_loader):
 
                 images = images.to(self.device)
                 labels = labels.to(self.device)
@@ -393,10 +327,6 @@ class Trainer:
         """Trains the model for one epoch."""
         self.model.train()
 
-        # The batches contain Image(rgb x w x h), Labels (1 for 0), original dataset indices
-        face_batch: DatasetOutput
-        nonface_batch: DatasetOutput
-
         avg_loss: float = 0
         avg_acc: float = 0
         count: int = 0
@@ -404,7 +334,7 @@ class Trainer:
         train_loss = []
 
         bar = tqdm(self.train_loader)
-        for i, (images, labels, _, _) in enumerate(bar):
+        for i, (images, labels, _) in enumerate(bar):
             # Forward pass
             images, labels = images.to(self.device), labels.to(self.device) #, fitz.to(device)  # sending data to GPU
             pred, loss, sigout = self.model.forward(images, labels)
@@ -421,8 +351,8 @@ class Trainer:
             avg_loss += loss.item()
             avg_acc += acc
 
-            if i == self.train_len/ARGS.batch_size: # 48: #% self.eval_freq == 0:
-                logger.info(f"Training: batch:{i} accuracy:{acc}") # , AUC:{a_u_c}")
+            if i == self.train_len/self.args.batch_size:
+                logger.info(f"Training: batch:{i} accuracy:{acc}")
 
             loss_np = loss.detach().cpu().numpy()  # sending loss to cpu
             train_loss.append(loss_np)  # appending loss to loss list
@@ -437,7 +367,6 @@ class Trainer:
         """Updates the data loader for faces to be proportional to how challenge each image is, in case
         debias_type not none is.
         """
-        # dataset_train = GenericImageDataset(self.df_train, 'train', 'train', transform=self.transforms)
         dataset_train = GenericImageDataset(csv=self.df_train)
         hist_loader = make_hist_loader(dataset_train, self.batch_size)
 
@@ -460,7 +389,7 @@ class Trainer:
 
         with torch.no_grad():
             for _, batch in enumerate(data_loader):
-                images, labels, index, _ = batch
+                images, labels, index= batch
                 images, labels, index = images.to(self.device), labels.to(self.device), index.to(self.device)
 
                 all_labels = torch.cat((all_labels, labels))
@@ -488,8 +417,6 @@ class Trainer:
 
         self.visualize_bias(probs, data_loader, all_labels, all_index, epoch)
 
-        print(probs.shape)
-
         return probs
 
     def sample(self, n_rows=4):
@@ -497,7 +424,7 @@ class Trainer:
         sample_images = self.model.sample(n_samples = n_samples)
 
         plt.figure(figsize=(n_rows*2,n_rows*2))
-        grid = make_grid(sample_images.reshape(n_samples,3,ARGS.image_size,ARGS.image_size), n_rows)
+        grid = make_grid(sample_images.reshape(n_samples,3,self.args.image_size,self.args.image_size), n_rows)
         plt.imshow(grid.permute(1,2,0).cpu())
 
         utils.remove_frame(plt)
@@ -526,14 +453,14 @@ class Trainer:
             images = utils.sample_idxs_from_loader(indices, data_loader, labels[0])
 
             ax = fig.add_subplot(2, 2, i+1)
-            grid = make_grid(images.reshape(n_samples,3,ARGS.image_size,ARGS.image_size), n_rows)
+            grid = make_grid(images.reshape(n_samples,3,self.args.image_size,self.args.image_size), n_rows)
             plt.imshow(grid.permute(1,2,0).cpu())
             ax.set_title(sub_titles[i], fontdict={"fontsize":30})
 
             utils.remove_frame(plt)
 
         if save:
-            fig.savefig(f'results/plots/{self.config.test_no}/best_and_worst/epoch_{epoch+1}.png', bbox_inches='tight', dpi=300)
+            fig.savefig(f'results/plots/{self.args.test_no}/best_and_worst/epoch_{epoch+1}.png', bbox_inches='tight', dpi=128)
 
             plt.close()
 
@@ -558,8 +485,7 @@ class Trainer:
 
         with torch.no_grad():
             for i, batch in enumerate(self.valid_loader):
-                # images, labels, idxs = utils.concat_batches(face_batch, nonface_batch)
-                images, labels, idxs, _ = batch
+                images, labels, idxs = batch
 
                 images = images.to(self.device)
                 labels = labels.to(self.device)
@@ -578,8 +504,8 @@ class Trainer:
 
                 count = i
 
-        best_faces, worst_faces, best_other, worst_other = utils.get_best_and_worst_predictions(all_labels, all_preds, self.device)
-        fig = self.visualize_best_and_worst(self.valid_loader, all_labels, all_idxs, 0, best_faces, worst_faces, best_other, worst_other, save=True)
+        best_mal, worst_mal, best_ben, worst_ben = utils.get_best_and_worst_predictions(all_labels, all_preds, self.device)
+        fig = self.visualize_best_and_worst(self.valid_loader, all_labels, all_idxs, 0, best_mal, worst_mal, best_ben, worst_ben, save=True)
 
         fig.show()
 

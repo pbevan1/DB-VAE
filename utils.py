@@ -38,24 +38,24 @@ def calculate_sens_spec(labels, sigout):
     return sensitivity, specificity
 
 def get_best_and_worst_predictions(labels, pred, device):
-    """Returns indices of the best and worst predicted faces."""
+    """Returns indices of the best and worst predicted images."""
     n_rows = 4
     n_samples = n_rows**2
 
     logger.info(f"Melanoma percentage: {float(labels.sum().item())/len(labels)}")
     indices = torch.tensor([i for i in range(len(labels))]).long().to(device)
 
-    faceslice = labels == 1
-    faces,       other       = pred[faceslice],    pred[~faceslice]
-    faces_index, other_index = indices[faceslice], indices[~faceslice]
+    melslice = labels == 1
+    mel, ben = pred[melslice],    pred[~melslice]
+    melanoma_index, benign_index = indices[melslice], indices[~melslice]
 
-    worst_faces = faces_index[faces.argsort()[:n_samples]]
-    best_faces = faces_index[faces.argsort(descending=True)[:n_samples]]
+    worst_mal = melanoma_index[mel.argsort()[:n_samples]]
+    best_mal = melanoma_index[mel.argsort(descending=True)[:n_samples]]
 
-    worst_other = other_index[other.argsort(descending=True)[:n_samples]]
-    best_other = other_index[other.argsort()[:n_samples]]
+    worst_ben = benign_index[ben.argsort(descending=True)[:n_samples]]
+    best_ben = benign_index[ben.argsort()[:n_samples]]
 
-    return best_faces, worst_faces, best_other, worst_other
+    return best_mal, worst_mal, best_ben, worst_ben
 
 def calculate_places(name_list, setups, w, s):
     """Calculates the places in the final barplot."""
