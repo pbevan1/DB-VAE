@@ -1,6 +1,5 @@
 from typing import List
 from logger import logger
-from datasets.data_utils import DatasetOutput
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,19 +8,48 @@ from torch.utils.data import ConcatDataset, DataLoader
 import torch
 import torchvision.transforms as transforms
 from torchvision.utils import make_grid
+import torchvision.transforms as transforms
+import os
+import uuid
+from typing import Optional, NamedTuple
 import gc
 from collections import Counter
 from PIL import Image
 from sklearn.metrics import roc_auc_score, confusion_matrix
-
-from dataset import sample_dataset, sample_idxs_from_loader #, sample_idxs_from_loaders
-
 
 # inverse transform to get normalize image back to original form for visualization
 inv_normalize = transforms.Normalize(
     mean=[-0.485/0.229, -0.456/0.224, -0.406/0.255],
     std=[1/0.229, 1/0.224, 1/0.255]
 )
+
+# Default transform
+default_transform = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Resize((256, 256)),
+    transforms.ToTensor()
+])
+
+class DatasetOutput(NamedTuple):
+    image: torch.FloatTensor
+    label: int
+    idx: int
+
+def visualize_tensor(img_tensor: torch.Tensor):
+    pil_transformer = transforms.ToPILImage()
+    pil_transformer(img_tensor).show()
+
+def save_images(torch_tensors: torch.Tensor, path_to_folder: str):
+    rand_filenames = str(uuid.uuid4())[:8]
+    pil_transformer = transforms.ToPILImage()
+    image_folder = f"results/{path_to_folder}/debug/images/{rand_filenames}/"
+    os.makedirs(image_folder, exist_ok=True)
+
+    for i, img in enumerate(torch_tensors):
+        pil_img = pil_transformer(img)
+        pil_img.save(f"{image_folder}/{rand_filenames}_{i}.jpg")
+
+    return torch_tensors
 
 def calculate_accuracy(labels, pred):
     """Calculates accuracy given labels and predictions."""

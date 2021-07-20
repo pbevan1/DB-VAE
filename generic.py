@@ -1,13 +1,11 @@
 from torchvision.transforms import ToPILImage
-from datasets.data_utils import DatasetOutput, default_transform
 from typing import Callable
-from PIL import Image
-from .data_utils import DatasetOutput
 import torch
 from torch.utils.data import Dataset
-from setup import *
 import cv2
 import numpy as np
+import utils
+from setup import *
 
 class GenericImageDataset(Dataset):
     """Generic dataset which defines all basic operations for the images."""
@@ -16,7 +14,7 @@ class GenericImageDataset(Dataset):
         csv,
         filter_skin_color = None,
         path_to_images: str = args.image_dir,
-        transform: Callable = default_transform, ###
+        transform: Callable = utils.default_transform, ###
         **kwargs
     ):
         self.filter_skin_color = filter_skin_color
@@ -49,7 +47,7 @@ class GenericImageDataset(Dataset):
 
         data = torch.tensor(image).permute(1,2,0).float()
 
-        return DatasetOutput(
+        return utils.DatasetOutput(
             image=data,
             label=torch.tensor(self.csv.iloc[idx].target).long(),
             idx=torch.tensor(idx).long(),

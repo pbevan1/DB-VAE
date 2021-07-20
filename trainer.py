@@ -1,23 +1,15 @@
 import torch
 from typing import Optional
 import datetime
-import os
 import pickle
 from tqdm import tqdm
-from logger import logger
-from decimal import Decimal
-import numpy as np
 from matplotlib import pyplot as plt
-from torch.utils.data.dataset import Dataset
 from torch.utils.data.sampler import RandomSampler
 from torchvision.utils import make_grid
-
-from setup import init_trainining_results
 from vae_model import Db_vae
-from datasets.data_utils import DatasetOutput
 import utils
 from dataset import *
-from datasets.generic import *
+from generic import *
 
 class Trainer:
     def __init__(
@@ -261,8 +253,8 @@ class Trainer:
         mean_probs = [np.mean(probs[highest_probs_idx].detach().cpu().numpy()),
                       np.mean(probs[lowest_probs_idx].detach().cpu().numpy())]
 
-        highest_imgs = utils.sample_idxs_from_loader(all_index[highest_probs_idx], data_loader, 1)
-        lowest_imgs = utils.sample_idxs_from_loader(all_index[lowest_probs_idx], data_loader, 1)
+        highest_imgs = sample_idxs_from_loader(all_index[highest_probs_idx], data_loader, 1)
+        lowest_imgs = sample_idxs_from_loader(all_index[lowest_probs_idx], data_loader, 1)
 
         img_list = (highest_imgs, lowest_imgs)
         titles = ("Lowest Representation", "Highest Representation")
@@ -450,7 +442,7 @@ class Trainer:
         sub_titles = ["Best melanoma", "Worst melanoma", "Best benign", "Worst benign"]
         for i, indices in enumerate((best_faces, worst_faces, best_other, worst_other)):
             labels, indices = all_labels[indices], all_indices[indices]
-            images = utils.sample_idxs_from_loader(indices, data_loader, labels[0])
+            images = sample_idxs_from_loader(indices, data_loader, labels[0])
 
             ax = fig.add_subplot(2, 2, i+1)
             grid = make_grid(images.reshape(n_samples,3,self.args.image_size,self.args.image_size), n_rows)
